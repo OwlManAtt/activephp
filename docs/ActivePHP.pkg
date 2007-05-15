@@ -1,0 +1,86 @@
+<?php
+/** 
+ * @ignore
+ */
+
+/* . . . Create a DB connection . . . */
+
+require('/var/www/php-lib/r_and_d/aphp/aphp.class.php');
+
+// Create an object to represent our table.
+class Staff extends ActiveTable
+{
+    protected $table_name = 'staff'; // This is the table name.
+    protected $primary_key = 'sid';  // The PK.
+
+    // The LOOKUPS array is completely optional. It will add JOINs to the load and allow
+    // you to get additional (read-only) data. If you do not need to do any JOINs, you are
+    // free to completely omit this section.
+    //
+    // The resulting data is used just like data from the primary table - getCompanyName(), etc.
+    // You cannot perform a setCompanyName('foo'), however.
+    //
+    // For further information, see the API documentation.
+    protected $LOOKUPS = array(
+        array(
+            // 'local_table' => 'staff', // OPTIONAL - Defaults to $this->table_name
+            'local_key' => 'company_id', // Key in your source table
+            'foreign_table' => 'company', // The name of the table being joined to
+            'foreign_key' => 'company_id', // Key in the table being joined to
+            'join_type' => 'inner', // Inner or left.
+        ),
+    );
+
+    public function __construct($db)
+    {
+        parent::__construct($db); // This needs to be called when the object is constructed and given the DB.
+    }
+
+    // You are free to define your own get/set methods.
+    public function getEgoBooster()
+    {
+        return $this->getName()." is cool!\n";
+    }
+
+    // You can override the default get/set methods
+    // with your own.
+    public function getHours()
+    {
+        return "NONE";
+    }
+} // end staff
+
+// EXAMPLE 0 - LOAD & USE
+// ----------------------
+$record = new Staff($db);
+$record->load(1);
+print $record->getName()."\n";
+print $record->getDeskphone()."\n";
+print $record->getCompanyName()."\n"; // Company name comes from the company table that staff is JOIN'd to!
+
+// EXAMPLE 1 - LOAD & UPDATE
+// -------------------------
+$record = new Staff($db);
+$record->load(1);
+$record->setName('Kevin Waters');
+$record->save();
+
+// EXAMPLE 2 - INSERT & LOAD
+// -------------------------
+$insert = array('name' => 'Tobey Waruu','deskphone' => '203-867-5309','hours' => 'lol dunno');
+$record = new Staff($db);
+$record->create($insert);
+
+// EXAMPLE 3 - DELETE
+// ------------------
+$record = new Staff($db);
+$record->load(81);
+$record->destroy();
+
+// EXAMPLE 4 - FIND BY ATTRIBUTE
+// -----------------------------
+$find = new Staff($db); // Needing this instance to do a find is an unfortunate limitation of PHP.
+$RECORDS = $find->findByName('Stacey Ell'); // Returns an array of rows
+$RECORDS[0]->getName(); // Stacey Ell
+
+?>

@@ -744,7 +744,7 @@ class ActiveTable
         while($resource->fetchInto($row))
         {
             eval('$tmp = new '.get_class($this).'($this->db);');
-            $tmp->load($row['pk_id']);
+            $tmp->load(array_shift($row));
             $SET[] = $tmp;
         } // end loop
         
@@ -1016,7 +1016,7 @@ class ActiveTable
             {
                 if($LOOKUP['write'] == true)
                 {
-                    $resource = $this->db->autoExecute($LOOKUP['foreign_table'],$LOOKUPS_DATA[$LOOKUP['foreign_table']],DB_AUTOQUERY_UPDATE,"{$LOOKUP['foreign_key']} = ".$this->db->quoteSmart($this->DATA[$LOOKUP['local_key']]));
+                    $resource = $this->db->autoExecute($LOOKUP['foreign_table'],$this->LOOKUPS_DATA[$LOOKUP['foreign_table']],DB_AUTOQUERY_UPDATE,"{$LOOKUP['foreign_key']} = ".$this->db->quoteSmart($this->DATA[$LOOKUP['local_key']]));
                     if(PEAR::isError($resource))
                     {
                         throw new SQLError($resource->getDebugInfo(),$resource->userinfo,910);

@@ -597,7 +597,7 @@ class ActiveTable
                         {
                             if(array_key_exists($property_name,$this->LOOKUPS_DATA[$LOOKUP['foreign_table']]) == true)
                             {
-                                $this->LOOKUPS_DATA[$LOOKUP['foreign_table']][$property_name] = $value;
+                                $this->LOOKUPS_DATA[$LOOKUP['foreign_table']][$property_name] = $parameters[0];
                                 return null;
                             }
                         }

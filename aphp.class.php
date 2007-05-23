@@ -4,338 +4,14 @@
  *
  * {@tutorial aphp/README}
  *
- * @package    ActivePHP 
+ * @package    ActiveTable 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
- * @version    1.1.3-dev
+ * @version    1.6.0
  */
-
-interface ActiveTable_SQL
-{
-    public function reset();
-    
-    public function getLastInsertId();
-    public function getDescribeTable($table_name,$database=null);
-
-    public function getQuery($verb);
-
-    public function addFrom($table,$database=null);
-    public function addJoinClause($LOOKUPS);
-    public function addKeys($table,$COLUMNS,$table_id='x');
-    public function addWhere($table,$column);
-    public function addOrder($sql_fragment);
-    public function addLimit($limit);
-} // end ActiveTable_SQL
-
-class ActiveTable_SQL_MySQL implements ActiveTable_SQL
-{   
-    protected $columns = array();
-    protected $from = '';
-    protected $join = array();
-    protected $where = array();
-    protected $order = '';
-    protected $limit = '';
-
-    public function __construct()
-    {
-        // Initialize
-        $this->reset();
-
-    } // end __construct
-
-    public function reset()
-    {
-        $this->columns = array();
-        $this->from = '';
-        $this->join = array();
-        $this->where = array();
-        $this->order = '';
-        $this->limit = '';
-    } // end reset
-
-    public function addOrder($sql_fragment)
-    {
-        $this->order = $sql_fragment;
-    } // end addOrder
-
-    public function getQuery($verb)
-    {
-        $sql = '';
-        
-        switch(strtolower($verb))
-        {
-            case 'select':
-            {
-                $sql .= "SELECT\n";
-                $sql .= implode(",\n",$this->columns)."\n";
-                $sql .= "FROM {$this->from}\n";
-
-                if(sizeof($this->join) > 0)
-                {
-                    $sql .= implode("\n",$this->join)."\n";
-                }
-
-                if(sizeof($this->where) > 0)
-                {
-                    $sql .= "WHERE ".implode("\nAND ",$this->where)."\n";
-                }
-
-                if($this->order != null)
-                {
-                    $sql .= $this->order."\n";
-                }
-
-                if($this->limit != null)
-                {
-                    $sql .= "LIMIT {$this->limit}";
-                }
-
-                break;
-            } // end select
-        } // end switch
-
-        return $sql;
-    } // end getQuery
-
-    public function addFrom($table,$database=null)
-    {
-        if($database == null)
-        {
-            $this->from = "`$table`";
-        }
-        else
-        {
-            $this->from = "`$database`.`$table`";
-        }
-    } // end addFrom
-
-    public function addWhere($table,$column)
-    {
-        $this->where[] = "`$table`.`$column` = ?";
-    } // end addWhere
-    
-    public function addLimit($limit)
-    {
-        $this->limit = "$limit";
-    } // end addLimit
-    
-    // Must return in the format table__column
-    public function addKeys($table,$COLUMNS,$table_id='x')
-    {
-        foreach($COLUMNS as $id => $key)
-        {
-            if($key != null)
-            {
-                $this->columns[] = "`{$table}`.`{$key}` AS `c{$table_id}_{$id}`";
-            }
-        } // end column loop
-
-    } // end addKeys
-    
-    public function getDescribeTable($table_name,$database=null)
-    {
-        if($database == null)
-        {
-            return "DESCRIBE `$table_name`";
-        }
-        else
-        {
-            return "DESCRIBE `$database`.`$table_name`";
-        }
-    } // end getDescribeTable
-    
-    public function addJoinClause($LOOKUPS)
-    {
-        // There are lookup tables - DO IT!
-        if(sizeof($LOOKUPS) > 0)
-        {
-            foreach($LOOKUPS as $LOOKUP)
-            {
-                $join = '';
-                switch(strtolower($LOOKUP['join_type']))
-                {
-                    default:
-                    {
-                        throw new ArgumentError("Unknown join type '{$LOOKUP['join_type']}' specified for '{$LOOKUP['foreign_table']}' lookup.",903);
-
-                        break;
-                    }
-                    
-                    case 'left':
-                    {
-                        $join = 'LEFT JOIN';
-                        
-                        break;
-                    } // end left
-
-                    case 'inner':
-                    {
-                        $join = 'INNER JOIN';
-
-                        break;
-                    } // end inner
-                } // end join switch
-
-                $this->join[] = "$join `{$LOOKUP['foreign_table']}` ON `{$LOOKUP['local_table']}`.`{$LOOKUP['local_key']}` = `{$LOOKUP['foreign_table']}`.`{$LOOKUP['foreign_key']}`";
-            } // end loopup loop
-        } // end lookups > 0
-
-    } // end addJoinClause
-
-    public function getLastInsertId()
-    {
-
-    } // end getLastInsertId
-} // end ActiveTable_MySQL_SQL
-
-class ActiveTable_SQL_Oracle implements ActiveTable_SQL
-{
-    protected $columns = array();
-    protected $from = array();
-    protected $where = array();
-    protected $order = '';
-
-    public function __construct()
-    {
-        // Initialize
-        $this->reset();
-    } // end __construct
-
-    public function reset()
-    {
-        $this->columns = array();
-        $this->from = array();
-        $this->where = array();
-        $this->order = '';
-    } // end reset
-
-    public function addOrder($sql_fragment)
-    {
-        $this->order = $sql_fragment;
-    } // end addOrder
-
-    public function getQuery($verb)
-    {
-        $sql = '';
-        
-        switch(strtolower($verb))
-        {
-            case 'select':
-            {
-                $sql .= "SELECT\n";
-                $sql .= implode(",\n",$this->columns)."\n";
-                $sql .= "FROM ".implode(", ",$this->from)."\n";
-                    
-                if(sizeof($this->where) > 0)
-                {
-                    $sql .= "WHERE ".implode("\nAND ",$this->where)."\n";
-                }
-
-                if($this->order != null)
-                {
-                    $sql .= $this->order."\n";
-                }
-
-                break;
-            } // end select
-        } // end switch
-
-        return $sql;
-    } // end getQuery
-
-    public function addFrom($table,$database=null)
-    {
-        if($database == null)
-        {
-            $this->from[] = "$table";
-        }
-        else
-        {
-            $this->from[] = "$database.$table";
-        }
-    } // end addFrom
-
-    public function addWhere($table,$column)
-    {
-        $this->where[] = "$table.$column = ?";
-    } // end addWhere
-
-    public function addLimit($limit)
-    {
-        $this->where[] = "rownum >= $limit";
-    } // end addLimit
-
-    public function addKeys($table,$COLUMNS,$table_id='x')
-    {
-        foreach($COLUMNS as $id => $key)
-        {
-            if($key != null)
-            {
-                $this->columns[] = "{$table}.{$key} AS c{$table_id}_{$id}";
-            }
-        } // end column loop
-        
-    } // end addKeys
-    
-    public function getDescribeTable($table_name,$database=null)
-    {
-        $sql = "SELECT COLUMN_NAME AS field FROM ALL_TAB_COLUMNS WHERE UPPER(TABLE_NAME) = UPPER('$table_name')";
-        $sql .= " AND UPPER(OWNER) = UPPER('$database')";
-        
-        return $sql;
-    } // end getDescribeTable
-
-    public function addJoinClause($LOOKUPS)
-    {
-        // There are lookup tables - DO IT!
-        if(sizeof($LOOKUPS) > 0)
-        {
-            foreach($LOOKUPS as $LOOKUP)
-            {
-                if($LOOKUP['database'] == null)
-                {
-                    $this->from[] = $LOOKUP['foreign_table'];
-                }
-                else
-                {
-                    $this->from[] = $LOOKUP['database'].'.'.$LOOKUP['foreign_table'];
-                }
-                
-                switch(strtolower($LOOKUP['join_type']))
-                {
-                    default:
-                    {
-                        throw new ArgumentError("Unknown join type '{$LOOKUP['join_type']}' specified for '{$LOOKUP['foreign_table']}' lookup.",903);
-
-                        break;
-                    }
-                   
-                    /* 
-                    case 'left':
-                    {
-                        $join = 'LEFT JOIN';
-                        
-                        break;
-                    } // end left
-                    */
-
-                    case 'inner':
-                    {
-                        $this->where[] = "{$LOOKUP['local_table']}.{$LOOKUP['local_key']} = {$LOOKUP['foreign_table']}.{$LOOKUP['foreign_key']}";
-
-                        break;
-                    } // end inner
-                } // end join switch
-            } // end loopup loop
-        } // end lookups > 0
-
-    } // end addJoinClause
-
-    public function getLastInsertId()
-    {
-
-    } // end getLastInsertId
-} // end ActiveTable_Oracle_SQL
+require_once('SqlGenerators/interface.inc.php');
+require_once('SqlGenerators/mysql.class.php');
+require_once('SqlGenerators/oci.class.php');
 
 /**
  * The base class that implements all of the magic for your child classes.
@@ -416,6 +92,7 @@ class ActiveTable
      *    foreign_table => <em>the lookup table's name</em>
      *    join_type => <em>inner</em>|<em>left</em>
      *    write => <em>false</em>|<em>true</em>
+     *    filter => array('table' => 'table','column' => 'column', 'value' => 'value'|array('value1','value2'))
      * )
      *
      * @var array
@@ -666,6 +343,17 @@ class ActiveTable
      *  );
      * </code>
      *
+     * That 'value' can also have an array passed as its value. If an array is give, an
+     * IN will be used.
+     *
+     * <code>
+     *  $TO_PASS[] = array(
+     *      'table' => 'company',   // A table from LOOKUP
+     *      'column' => 'type',     // A column from this table.
+     *      'value' => array('foo','bar','baz') // company.type IN ('foo','bar','baz') 
+     *  );
+     * </code>
+     * 
      * *NOTE* - At this time, nesting and ORs are not supported.
      *
      * @param array Things to search on. Everything is an AND and nesting
@@ -714,8 +402,19 @@ class ActiveTable
                     throw new ArgumentError('Column or value not given.',951);
                 }
 
-                $this->sql_generator->addWhere($value['table'],$value['column']);
-                $SEARCH_VALUES[] = $value['value'];
+                if(is_array($value['value']) == true)
+                {
+                    $this->sql_generator->addWhere($value['table'],$value['column'],'in',sizeof($value['value']));
+                    foreach($value['value'] as $in_val)
+                    {
+                        $SEARCH_VALUES[] = $in_val;
+                    }
+                } // end IN
+                else
+                {
+                    $this->sql_generator->addWhere($value['table'],$value['column']);
+                    $SEARCH_VALUES[] = $value['value'];
+                } // end =
             }
             else
             {

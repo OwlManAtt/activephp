@@ -90,25 +90,47 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
         }
     } // end addFrom
 
-    public function addWhere($table,$column,$type='equal',$count=0)
+    public function addWhere($table,$column,$type='=',$count=0)
     {
         switch($type)
         {
-            case 'equal':
+            case '>=':
+            case '>':
+            case '<=':
+            case '<':
+            case '<>':
+            case '=':
             {
-                $this->where[] = "`$table`.`$column` = ?";
+                $this->where[] = "`$table`.`$column` $type ?";
 
                 break;
-            } // end equal
+            } // end >= > <= < <> =
 
+            case 'not_in':
             case 'in':
             {
+                $in = '';
+                if($type == 'in')
+                {
+                    $in = 'IN';
+                }
+                elseif($type == 'not_in')
+                {
+                    $in = 'NOT IN';
+                }
+                
                 $placeholders = implode(',',array_fill(0,$count,'?'));
-                $this->where[] = "`$table`.`$column` IN ($placeholders)";
+                $this->where[] = "`$table`.`$column` $in ($placeholders)";
     
                 break;
-            }
+            } // end in, not_in
 
+            default:
+            {
+                throw new ArgumentError('Invalid type given to SQL generator.');
+                
+                break;
+            } // end default
         } // end switch
         
     } // end addWhere

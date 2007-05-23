@@ -350,6 +350,7 @@ class ActiveTable
      *  $TO_PASS[] = array(
      *      'table' => 'company',   // A table from LOOKUP
      *      'column' => 'type',     // A column from this table.
+     *      'search_type' => '>'    // < =< > >= = <> //
      *      'value' => array('foo','bar','baz') // company.type IN ('foo','bar','baz') 
      *  );
      * </code>
@@ -401,10 +402,34 @@ class ActiveTable
                 {
                     throw new ArgumentError('Column or value not given.',951);
                 }
+                
+                if(array_key_exists('search_type',$value) == false)
+                {
+                    $value['search_type'] = '=';
+                }
+                
+                if(in_array($value['search_type'],array('>','>=','<','<=','<>','=')) == false)
+                {
+                    throw new ArgumentError('Invalid search type given.',955);
+                }
 
                 if(is_array($value['value']) == true)
                 {
-                    $this->sql_generator->addWhere($value['table'],$value['column'],'in',sizeof($value['value']));
+                    $in_type = '';
+                    if($value['search_type'] == '=')
+                    {
+                        $in_type = 'in';
+                    }
+                    elseif($value['search_type'] == '<>')
+                    {
+                        $in_type = 'not_in';
+                    }
+                    else
+                    {
+                        throw new ArgumentError('Invalid search type given for IN. Valid values are = and <>.',956);
+                    }
+                    
+                    $this->sql_generator->addWhere($value['table'],$value['column'],$in_type,sizeof($value['value']));
                     foreach($value['value'] as $in_val)
                     {
                         $SEARCH_VALUES[] = $in_val;
@@ -412,7 +437,7 @@ class ActiveTable
                 } // end IN
                 else
                 {
-                    $this->sql_generator->addWhere($value['table'],$value['column']);
+                    $this->sql_generator->addWhere($value['table'],$value['column'],$value['search_type']);
                     $SEARCH_VALUES[] = $value['value'];
                 } // end =
             }

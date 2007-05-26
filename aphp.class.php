@@ -7,7 +7,7 @@
  * @package    ActiveTable 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
- * @version    1.6.0
+ * @version    1.7.0
  */
 require_once('SqlGenerators/interface.inc.php');
 require_once('SqlGenerators/mysql.class.php');
@@ -292,25 +292,13 @@ class ActiveTable
             // $property_name;
             $value = $parameters[0];
             
-            $sql = "SELECT `{$this->primary_key}` AS `table_id` FROM `{$this->table_name}` WHERE `$property_name` = ?"; 
-            $handle = $this->db->prepare($sql);
-            $resource = $this->db->execute($handle,array($value));
-            $this->db->freePrepared($handle);
-
-            if(PEAR::isError($resource))
-            {
-                throw new SQLError($resource->getDebugInfo(),$resource->userinfo,906);
-            }
-
-            $ROWS = array();
-            while($resource->fetchInto($row))
-            {
-                // __CLASS__ is ActiveTable; RONG
-                $code = '$obj = new '.get_class($this).'($this->db);';
-                eval($code);
-                $obj->load($row['table_id']);
-                $ROWS[] = $obj;    
-            } // end loop
+            $params = array();
+            $params[] = array(
+                'table' => $this->table_name,
+                'column' => $property_name,
+                'value' => $value,
+            );
+            $ROWS = $this->findBy($params);
         
             return $ROWS;
         } // end finder

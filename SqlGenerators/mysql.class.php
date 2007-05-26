@@ -5,7 +5,7 @@
  * @package    ActiveTable 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
- * @version    1.6.0
+ * @version    1.7.0
  */
 
 class ActiveTable_SQL_MySQL implements ActiveTable_SQL

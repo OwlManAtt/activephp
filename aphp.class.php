@@ -221,7 +221,7 @@ class ActiveTable
 
     /**
      * Magic method that any calls to undefined methods get routed to.
-     * This provides the get* and set* methods.
+     * This provides the get*(), set*(), and findBy*() methods.
      *
      * @internal
      */
@@ -280,7 +280,7 @@ class ActiveTable
                         }
                     } // end lookup loopdewhoop
                     
-                    throw new ArgumentError('That attribute is not in the domain of the '.get_class($this)." table. Note that lookup'd values are read-only.",901);
+                    throw new ArgumentError("That attribute ($property_name) is not in the domain of the ".get_class($this)." table. Note that lookup'd values are read-only unless otherwise enabled.",901);
                 }
             } // end set
         } // end the regexp matched...

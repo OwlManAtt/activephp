@@ -5,7 +5,7 @@
  * @package    ActiveTable 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
- * @version    1.7.0
+ * @version    1.8.0
  */
 
 class ActiveTable_SQL_MySQL implements ActiveTable_SQL
@@ -33,6 +33,16 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
         $this->order = '';
         $this->limit = '';
     } // end reset
+
+    public function getFormattedDate($datetime)
+    {
+        if($datetime == null)
+        {
+            return '0000-00-00 00:00:00';
+        }
+        
+        return date('Y-m-d H:i:s',strtotime($datetime));
+    } // end getFormattedDate
 
     public function addOrder($sql_fragment)
     {
@@ -125,6 +135,24 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
                 break;
             } // end in, not_in
 
+            case 'is_not':
+            case 'is':
+            {
+                $is = '';
+                if($type == 'is')
+                {
+                    $is = 'IS NULL';
+                }
+                elseif($type == 'is_not')
+                {
+                    $is = 'IS NOT NULL';
+                }
+                
+                $this->where[] = "`$table`.`$column` $is";
+    
+                break;
+            } // end is, is_not
+
             default:
             {
                 throw new ArgumentError('Invalid type given to SQL generator.');
@@ -165,42 +193,35 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
         }
     } // end getDescribeTable
     
-    public function addJoinClause($LOOKUPS)
+    // public function addJoinClause($LOOKUPS)
+    public function addJoinClause($local_table,$local_key,$foreign_table,$foreign_key,$join_type,$database=null)
     {
-        // There are lookup tables - DO IT!
-        if(sizeof($LOOKUPS) > 0)
+        $join = '';
+        switch(strtolower($join_type))
         {
-            foreach($LOOKUPS as $LOOKUP)
+            default:
             {
-                $join = '';
-                switch(strtolower($LOOKUP['join_type']))
-                {
-                    default:
-                    {
-                        throw new ArgumentError("Unknown join type '{$LOOKUP['join_type']}' specified for '{$LOOKUP['foreign_table']}' lookup.",903);
+                throw new ArgumentError("Unknown join type '{$join_type}' specified for '{$foreign_table}' lookup.",903);
 
-                        break;
-                    }
-                    
-                    case 'left':
-                    {
-                        $join = 'LEFT JOIN';
-                        
-                        break;
-                    } // end left
+                break;
+            }
+            
+            case 'left':
+            {
+                $join = 'LEFT JOIN';
+                
+                break;
+            } // end left
 
-                    case 'inner':
-                    {
-                        $join = 'INNER JOIN';
+            case 'inner':
+            {
+                $join = 'INNER JOIN';
 
-                        break;
-                    } // end inner
-                } // end join switch
+                break;
+            } // end inner
+        } // end join switch
 
-                $this->join[] = "$join `{$LOOKUP['foreign_table']}` ON `{$LOOKUP['local_table']}`.`{$LOOKUP['local_key']}` = `{$LOOKUP['foreign_table']}`.`{$LOOKUP['foreign_key']}`";
-            } // end loopup loop
-        } // end lookups > 0
-
+        $this->join[] = "$join `{$foreign_table}` ON `{$local_table}`.`{$local_key}` = `{$foreign_table}`.`{$foreign_key}`";
     } // end addJoinClause
 
     public function getLastInsertId()

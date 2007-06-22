@@ -7,7 +7,7 @@
  * @package    ActiveTable 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
- * @version    1.7.0
+ * @version    1.8.0
  */
 require_once('SqlGenerators/interface.inc.php');
 require_once('SqlGenerators/mysql.class.php');
@@ -92,7 +92,7 @@ class ActiveTable
      *    foreign_table => <em>the lookup table's name</em>
      *    join_type => <em>inner</em>|<em>left</em>
      *    write => <em>false</em>|<em>true</em>
-     *    filter => array('table' => 'table','column' => 'column', 'value' => 'value'|array('value1','value2'))
+     *    filter => @See the findBy documentation. Pass one of those arrays.@ 
      * )
      *
      * @var array
@@ -126,6 +126,13 @@ class ActiveTable
      * @internal
      */
     protected $LOOKUPS_DATA = array();
+
+    /**
+     * Set this to true to enable debugging.
+     *
+     * @var boolean
+     **/
+    public $debug = false;
     
     /**
      * The constructor to set up the wrapper object. Give this a PEAR::DB
@@ -154,6 +161,10 @@ class ActiveTable
         {
             throw new ArgumentError('Invalid DB connector passed.',901);
         }
+
+        $db->setOption('portability',DB_PORTABILITY_ALL);
+        $db->setOption('debug',2);
+        $db->setFetchMode(DB_FETCHMODE_ASSOC);
         $this->db = $db;
 
         switch($this->db->phptype)
@@ -220,6 +231,16 @@ class ActiveTable
     } // end __construct
 
     /**
+     * Return the current date/time in the RDBMS' native format.
+     *
+     * @return string
+     **/
+    public function sysdate()
+    {
+        return $this->sql_generator->getFormattedDate(date('Y-m-d H:i:s'));
+    } // end sysdate
+
+    /**
      * Magic method that any calls to undefined methods get routed to.
      * This provides the get*(), set*(), and findBy*() methods.
      *
@@ -234,26 +255,12 @@ class ActiveTable
 
             if($FOUND[1] == 'g')
             {
-                // Try here first:
-                if(array_key_exists($property_name,$this->DATA) == true)
-                {
-                    return $this->DATA[$property_name];
-                }
-                else
-                {
-                    // Find the first occurance of this key in the lookups:
-                    foreach($this->LOOKUPS_DATA as $LOOKUP)
-                    {
-                        if(array_key_exists($property_name,$LOOKUP) == true)
-                        {
-                            return $LOOKUP[$property_name];
-                        }
-                    } // end lookups loop
-                } // end do lookups
-
+                return $this->get($property_name);
             } // end get
             elseif($FOUND[1] == 's')
             {
+                // TODO - Extract this into a #set($column,$table) like #get() is set up.
+                
                 // Don't let people screw around with the PK... 
                 if($property_name == $this->primary_key && $this->allow_pk_write == false)
                 {
@@ -306,6 +313,63 @@ class ActiveTable
         return false;
     } // end __call
 
+    /**
+     * Get the value back for a column from a row.
+     *
+     * It is preferred to use the shorthand, #getColumnName(), but in some cases
+     * where JOINs cause column name collisions (status_a.description, status_b.description - which 
+     * should #getDescription() look at?), this may be used and the table may be specified.
+     *
+     * @param string The column name to retrieve.
+     * @param string|void The table name to look in. If blank, a search is done and the first occurance is returned.
+     * @return string|integer|boolean The value.
+     **/
+    public function get($column,$table=null)
+    {
+        if($table == null)
+        {
+            // Try here first:
+            if(array_key_exists($column,$this->DATA) == true)
+            {
+                return $this->DATA[$column];
+            }
+            else
+            {
+                // Find the first occurance of this key in the lookups:
+                foreach($this->LOOKUPS_DATA as $LOOKUP)
+                {
+                    if(array_key_exists($column,$LOOKUP) == true)
+                    {
+                        return $LOOKUP[$column];
+                    }
+                } // end lookups loop
+            } // end do lookups
+        } // end table is not specified - generic search
+        else
+        {
+            // Table name is given - LET'S DO IT!
+            if($table == $this->table_name)
+            {
+                if(array_key_exists($column,$this->DATA) == true)
+                {
+                    return $this->DATA[$column];
+                }
+            } // end look in default table
+            else
+            {
+                if(array_key_exists($table,$this->LOOKUPS_DATA) == true)
+                {
+                    if(array_key_exists($column,$this->LOOKUPS_DATA[$table]) == true)
+                    {
+                        return $this->LOOKUPS_DATA[$table][$column];
+                    }
+                }
+            } // end look in JOIN'd table
+        } // end table specified - look it up.
+        
+        return null; 
+    } // end get
+
     /* ================ */
     /* ===== FIND ===== */
     /* ================ */
@@ -343,6 +407,23 @@ class ActiveTable
      *  );
      * </code>
      * 
+     * As far as IS (NOT) NULL goes, you can do it like so:
+     *
+     * <code>
+     *  $TO_PASS[] = array(
+     *      'table' => 'company',   // A table from LOOKUP
+     *      'column' => 'type',     // A column from this table.
+     *      'search_type' => '='    // '=' is 'IS NULL', '<>' is 'IS NOT NULL' 
+     *      'value' => null, 
+     *  );
+     * </code>
+     * 
+     * To get all rows for a table back, simply pass #findBy() a blank array.
+     *
+     * <code>
+     *  $all_rows = $foo->findBy(array());
+     * </code>
+     *
      * *NOTE* - At this time, nesting and ORs are not supported.
      *
      * @param array Things to search on. Everything is an AND and nesting
@@ -361,78 +442,40 @@ class ActiveTable
         {
             throw new ArgumentError('Args must be an array.',950);
         }
-        elseif(sizeof($args) <= 0)
-        {
-            throw new ArgumentError('Args cannot be an empty array.',951);
-        }
+
+        // Disabling this - We can get every row back with a blank array.
+        // elseif(sizeof($args) <= 0)
+        // {
+        //    throw new ArgumentError('Args cannot be an empty array.',951);
+        // }
         
+        $SEARCH_VALUES = array();
         $AND = array();
             
         // Clear things out.
         $this->sql_generator->reset();
         $this->sql_generator->addKeys($this->table_name,array($this->primary_key));
         $this->sql_generator->addFrom($this->table_name,$this->database);
-        $this->sql_generator->addJoinClause($this->LOOKUPS);
+        $foo = $this->make_join($this->LOOKUPS);
+        $SEARCH_VALUES = array_merge($SEARCH_VALUES,$foo);
 
-        $SEARCH_VALUES = array();
         foreach($args as $column => $value)
         {
-            // You can pass either an array (if you want othertable.column = value) or 'column' => 'value'.
-            if(is_array($value) == true)
+            $bar = $this->make_wheres($column,$value);
+            if($bar !== null)
             {
-                // No table specified...? Default it!
-                if(array_key_exists('table',$value) == false)
+                if(is_array($bar) == true)
                 {
-                    $value['table'] = $this->table_name;
+                    $SEARCH_VALUES = array_merge($SEARCH_VALUES,$bar);
                 }
-
-                if(array_key_exists('column',$value) == false || array_key_exists('value',$value) == false)
-                {
-                    throw new ArgumentError('Column or value not given.',951);
-                }
-                
-                if(array_key_exists('search_type',$value) == false)
-                {
-                    $value['search_type'] = '=';
-                }
-                
-                if(in_array($value['search_type'],array('>','>=','<','<=','<>','=')) == false)
-                {
-                    throw new ArgumentError('Invalid search type given.',955);
-                }
-
-                if(is_array($value['value']) == true)
-                {
-                    $in_type = '';
-                    if($value['search_type'] == '=')
-                    {
-                        $in_type = 'in';
-                    }
-                    elseif($value['search_type'] == '<>')
-                    {
-                        $in_type = 'not_in';
-                    }
-                    else
-                    {
-                        throw new ArgumentError('Invalid search type given for IN. Valid values are = and <>.',956);
-                    }
-                    
-                    $this->sql_generator->addWhere($value['table'],$value['column'],$in_type,sizeof($value['value']));
-                    foreach($value['value'] as $in_val)
-                    {
-                        $SEARCH_VALUES[] = $in_val;
-                    }
-                } // end IN
                 else
                 {
-                    $this->sql_generator->addWhere($value['table'],$value['column'],$value['search_type']);
-                    $SEARCH_VALUES[] = $value['value'];
-                } // end =
+                    $SEARCH_VALUES[] = $bar; 
+                }
             }
             else
             {
-                $this->sql_generator->addWhere($this->table_name,$column);
-                $SEARCH_VALUES[] = $value;
+                $SEARCH_VALUES[] = '0';
             }
         } // end loop
 
@@ -443,6 +486,8 @@ class ActiveTable
         }
         
         $sql = $this->sql_generator->getQuery('select');
+        $this->debug($sql,'sql');
+        
         $handle = $this->db->prepare($sql);
         $resource = $this->db->execute($handle,$SEARCH_VALUES);
         $this->db->freePrepared($handle);
@@ -510,13 +555,18 @@ class ActiveTable
         } // end lookups > 0
         
         $this->sql_generator->addFrom($this->table_name,$this->database);
-        $this->sql_generator->addJoinClause($this->LOOKUPS);
+        
+        // A filter on a join might make this more than just the PK... 
+        $SEARCH_VALUES = $this->make_join($this->LOOKUPS);
         $this->sql_generator->addWhere($this->table_name,$this->primary_key);
+        $SEARCH_VALUES[] = $pk_id;
+        
         $this->sql_generator->addLimit(1);
         $sql = $this->sql_generator->getQuery('select');
+        $this->debug($sql,'sql');
 
         $handle = $this->db->prepare($sql);
-        $resource = $this->db->execute($handle,array($pk_id));
+        $resource = $this->db->execute($handle,$SEARCH_VALUES);
         $this->db->freePrepared($handle);
         if(PEAR::isError($resource))
         {
@@ -599,6 +649,8 @@ class ActiveTable
         }
 
         $sql = "DELETE FROM {$this->table_name} WHERE {$this->primary_key} = ?";
+        $this->debug($sql,'sql');
+        
         $handle = $this->db->prepare($sql);
         $resource = $this->db->execute($handle,array($id));
         $this->db->freePrepared($handle);
@@ -742,6 +794,28 @@ class ActiveTable
     } // end save
 
     /* ====================================================================================== */
+    /* =============== Internal methods such as helpers, debugging stuff, etc. ============== */
+    /* ====================================================================================== */
+
+    /** 
+     * Write a debug message to the debugging system.
+     *
+     * Nothing will be done with this unless $debug is true.
+     *
+     * @param string The message to note.
+     * @param string A message type. 'info' is an informational note, 'sql' is a SQL query.
+     **/
+    protected function debug($message,$type='info')
+    {
+        if($this->debug == true)
+        {
+            print $message;
+        }
+        
+        return true;
+    } // end debug
+
+    /* ====================================================================================== */
     /* ===== Implementation details. These are irrelevant. Do not read below this line. ===== */
     /* ====================================================================================== */
 
@@ -797,60 +871,130 @@ class ActiveTable
 
         return $simple_word;
     } // end convert_camel_case
-
-    /**
-     * Generate the MITER JOIN ON w.x = y.z clauses.
-     *
-     * @internal
-     */
-
-    /*
-    private function __generate_joins()
+    
+    private function make_join($LOOKUPS)
     {
-        $JOINS_FINAL = array();
-        
-        // There are lookup tables - DO IT!
-        if(sizeof($this->LOOKUPS) > 0)
+        if(is_array($LOOKUPS) == true)
         {
-            foreach($this->LOOKUPS as $LOOKUP)
+            $FILTER_VALUES = array();
+            foreach($LOOKUPS as $LOOKUP)
             {
-                $join = '';
-                switch(strtolower($LOOKUP['join_type']))
+                $this->sql_generator->addJoinClause($LOOKUP['local_table'],$LOOKUP['local_key'],$LOOKUP['foreign_table'],$LOOKUP['foreign_key'],$LOOKUP['join_type'],$LOOKUP['database']);
+
+                if(array_key_exists('filter',$LOOKUP) == true)
                 {
-                    default:
+                    foreach($LOOKUP['filter'] as $column => $value)
                     {
-                        throw new ArgumentError("Unknown join type '{$LOOKUP['join_type']}' specified for '{$LOOKUP['foreign_table']}' lookup.",903);
+                        $foo = $this->make_wheres($column,$value);
 
-                        break;
-                    }
-                    
-                    case 'left':
-                    {
-                        $join = 'LEFT JOIN';
-                        
-                        break;
-                    } // end left
+                        if($foo !== null)
+                        {
+                            if(is_array($foo) == true)
+                            {
+                                $FILTER_VALUES = array_merge($FILTER_VALUES,$foo);
+                            }
+                            else
+                            {
+                                $FILTER_VALUES[] = $foo; 
+                            }
+                        }
+                    } // end filter loop
+                } // end filter?
+            }
+        } // end is array == true
 
-                    case 'inner':
-                    {
-                        $join = 'INNER JOIN';
+        return $FILTER_VALUES;
+    } // end make_join
 
-                        break;
-                    } // end inner
-                } // end join switch
+    private function make_wheres($column,$value)
+    {
+        // You can pass either an array (if you want othertable.$column,column = value) or 'column' => 'value'.
+        if(is_array($value) == true)
+        {
+            // no table specified...? default it!
+            if(array_key_exists('table',$value) == false)
+            {
+                $value['table'] = $this->table_name;
+            }
 
-                if(array_key_exists('local_table',$LOOKUP) == false)
+            if(array_key_exists('column',$value) == false || array_key_exists('value',$value) == false)
+            {
+                throw new ArgumentError('Column or value not given.',951);
+            }
+            
+            if(array_key_exists('search_type',$value) == false)
+            {
+                $value['search_type'] = '=';
+            }
+            
+            if(in_array($value['search_type'],array('>','>=','<','<=','<>','=')) == false)
+            {
+                throw new ArgumentError('Invalid search type given.',955);
+            }
+
+            if(is_array($value['value']) == true)
+            {
+                $in_type = '';
+                if($value['search_type'] == '=')
                 {
-                    $LOOKUP['local_table'] = $this->table_name;
+                    $in_type = 'in';
                 }
+                elseif($value['search_type'] == '<>')
+                {
+                    $in_type = 'not_in';
+                }
+                else
+                {
+                    throw new ArgumentError('Invalid search type given for in. Valid values are = and <>.',956);
+                }
+                
+                $this->sql_generator->addWhere($value['table'],$value['column'],$in_type,sizeof($value['value']));
+                foreach($value['value'] as $in_val)
+                {
+                    $search_value = $in_val;
+                }
+            } // end in
+            else
+            {
+                // The === ensures 0 won't be null.
+                if($value['value'] === null)
+                {
+                    $is_type = '';
+                    if($value['search_type'] == '=')
+                    {
+                        $is_type = 'is';
+                    }
+                    elseif($value['search_type'] == '<>')
+                    {
+                        $is_type = 'is_not';
+                    }
+                    else
+                    {
+                        throw new ArgumentError('Invalid search type given for IS. Valid values are = and <>.',957);
+                    }
+                } // end value is null
+                
+                if($is_type == null)
+                {
+                    $type = $value['search_type'];
+                }
+                else
+                {
+                    $type = $is_type;
+                }
+                
+                $this->sql_generator->addWhere($value['table'],$value['column'],$type);
+                $search_value = $value['value'];
+            } // end =
+        } // end is_array
+        else
+        {
+            $this->sql_generator->addWhere($this->table_name,$column);
+            $search_value = $value;
+        } // end string
 
-                $JOINS_FINAL[] = "$join `{$LOOKUP['foreign_table']}` ON `{$LOOKUP['local_table']}`.`{$LOOKUP['local_key']}` = `{$LOOKUP['foreign_table']}`.`{$LOOKUP['foreign_key']}`";
-            } // end loopup loop
-        } // end lookups > 0
-
-        return implode("\n",$JOINS_FINAL);
-    } // end __generate_joins
-    */
+        return $search_value;
+    } // end make_wheres
 
 } // end ActiveTable
 

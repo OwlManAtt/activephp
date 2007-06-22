@@ -5,7 +5,7 @@
  * @package    ActiveTable 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
- * @version    1.7.0
+ * @version    1.8.0
  */
 
 class ActiveTable_SQL_Oracle implements ActiveTable_SQL
@@ -28,6 +28,17 @@ class ActiveTable_SQL_Oracle implements ActiveTable_SQL
         $this->where = array();
         $this->order = '';
     } // end reset
+
+    public function getFormattedDate($datetime)
+    {
+        if($datetime == null)
+        {
+            return '0000-00-00 00:00:00';
+        }
+        
+        // YYYY-MM-DD HH24:MI:SS
+        return date('Y-m-d H:i:s',strtotime($datetime));
+    } // end getFormattedDate
 
     public function addOrder($sql_fragment)
     {
@@ -110,6 +121,24 @@ class ActiveTable_SQL_Oracle implements ActiveTable_SQL
                 break;
             } // end in, not_in
 
+            case 'is_not':
+            case 'is':
+            {
+                $is = '';
+                if($type == 'is')
+                {
+                    $is = 'IS NULL';
+                }
+                elseif($type == 'is_not')
+                {
+                    $is = 'IS NOT NULL';
+                }
+                
+                $this->where[] = "$table.$column $is";
+    
+                break;
+            } // end is, is_not
+
             default:
             {
                 throw new ArgumentError('Invalid type given to SQL generator.');
@@ -145,49 +174,42 @@ class ActiveTable_SQL_Oracle implements ActiveTable_SQL
         return $sql;
     } // end getDescribeTable
 
-    public function addJoinClause($LOOKUPS)
+    public function addJoinClause($local_table,$local_key,$foreign_table,$foreign_key,$join_type,$database=null)  
     {
-        // There are lookup tables - DO IT!
-        if(sizeof($LOOKUPS) > 0)
+        if($database == null)
         {
-            foreach($LOOKUPS as $LOOKUP)
+            $this->from[] = $foreign_table;
+        }
+        else
+        {
+            $this->from[] = $database.'.'.$foreign_table;
+        }
+        
+        switch(strtolower($join_type))
+        {
+            default:
             {
-                if($LOOKUP['database'] == null)
-                {
-                    $this->from[] = $LOOKUP['foreign_table'];
-                }
-                else
-                {
-                    $this->from[] = $LOOKUP['database'].'.'.$LOOKUP['foreign_table'];
-                }
+                throw new ArgumentError("Unknown join type '{$join_type}' specified for '{$foreign_table}' lookup.",903);
+
+                break;
+            }
+           
+            /* 
+            case 'left':
+            {
+                $join = 'LEFT JOIN';
                 
-                switch(strtolower($LOOKUP['join_type']))
-                {
-                    default:
-                    {
-                        throw new ArgumentError("Unknown join type '{$LOOKUP['join_type']}' specified for '{$LOOKUP['foreign_table']}' lookup.",903);
+                break;
+            } // end left
+            */
 
-                        break;
-                    }
-                   
-                    /* 
-                    case 'left':
-                    {
-                        $join = 'LEFT JOIN';
-                        
-                        break;
-                    } // end left
-                    */
+            case 'inner':
+            {
+                $this->where[] = "{$local_table}.{$local_key} = {$foreign_table}.{$foreign_key}";
 
-                    case 'inner':
-                    {
-                        $this->where[] = "{$LOOKUP['local_table']}.{$LOOKUP['local_key']} = {$LOOKUP['foreign_table']}.{$LOOKUP['foreign_key']}";
-
-                        break;
-                    } // end inner
-                } // end join switch
-            } // end loopup loop
-        } // end lookups > 0
+                break;
+            } // end inner
+        } // end join switch
 
     } // end addJoinClause
 

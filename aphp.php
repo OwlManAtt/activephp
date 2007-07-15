@@ -5,7 +5,7 @@
  * @package    ActivePHP
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
- * @version    0.5.0
+ * @version    1.9.0 
  **/
 
 // Required parts - the exception library.

@@ -1,6 +1,15 @@
 <?php
 /**
- * An exception to throw when bad arguments are given.
+ * Exceptions used by the ActivePHP suite. 
+ *
+ * @package    ActivePHP 
+ * @author     OwlManAtt <owlmanatt@gmail.com> 
+ * @copyright  2007, Yasashii Syndicate 
+ * @version    1.8.0
+ **/
+
+/**
+ * An exception to be thrown when the specified file is a blank and it is expected to be non-blank. 
  *
  * @package    ActivePHP 
  * @version    Release: @package_version@

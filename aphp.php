@@ -14,7 +14,8 @@ require_once('exceptions.inc.php');
 $base_path = realpath(getcwd());
 $MODULES = array(
     'active_table',
-    'csvio'
+    'csvio',
+    'dagg'
 );
 
 foreach($MODULES as $module)

@@ -1,4 +1,24 @@
 <?php
+/**
+ * An ActiveTable-based library for loading/writing CSVs to/from database tables. 
+ *
+ * @package    ActivePHP 
+ * @author     OwlManAtt <owlmanatt@gmail.com> 
+ * @copyright  2007, Yasashii Syndicate 
+ * @version    1.8.0
+ */
+
+/**
+ * The base class for CSVIO-enabled ActiveTable classes.
+ *
+ * This class should never be instantiated; extend the object
+ * and set the required attributes to get it working. 
+ *
+ * @package    ActivePHP 
+ * @author     OwlManAtt <owlmanatt@gmail.com> 
+ * @copyright  2007, Yasashii Syndicate
+ * @version    Release: @package_version@
+ **/
 class CSVIO extends ActiveTable
 {
     /**
@@ -58,7 +78,7 @@ class CSVIO extends ActiveTable
      * The normalized form of $FIELDS. Do not define this; it is auto-generated.
      *
      * @var array
-     * @access internal
+     * @internal
      **/
     protected $FIELDS_NORMALIZED = array();
 
@@ -168,6 +188,11 @@ class CSVIO extends ActiveTable
             $CREATE = $this->map_fields($data);
             $CREATE = $this->handle_formatters($CREATE);
             eval('$tmp = new '.get_class($this).'($this->db);');
+
+            if($this->debug == true)
+            {
+                $tmp->debug = true;
+            }
 
             $tmp->create($CREATE);
             $imported++;

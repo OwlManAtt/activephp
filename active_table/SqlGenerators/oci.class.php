@@ -2,12 +2,20 @@
 /**
  * Classes for writing PL/SQL queries.
  *
- * @package    ActiveTable 
+ * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
  * @version    1.8.0
  */
 
+/**
+ * Oracle PL/SQL driver for ActiveTable.
+ *
+ * @package    ActivePHP 
+ * @author     OwlManAtt <owlmanatt@gmail.com> 
+ * @copyright  2007, Yasashii Syndicate
+ * @version    Release: @package_version@
+ **/
 class ActiveTable_SQL_Oracle implements ActiveTable_SQL
 {
     protected $columns = array();
@@ -165,6 +173,11 @@ class ActiveTable_SQL_Oracle implements ActiveTable_SQL
         } // end column loop
         
     } // end addKeys
+
+    public function addVirtualKey($statement,$index)
+    {
+        $this->columns[] = "$statement AS cVIRT_$index";
+    } // end addVirtualKey
     
     public function getDescribeTable($table_name,$database=null)
     {
@@ -174,15 +187,15 @@ class ActiveTable_SQL_Oracle implements ActiveTable_SQL
         return $sql;
     } // end getDescribeTable
 
-    public function addJoinClause($local_table,$local_key,$foreign_table,$foreign_key,$join_type,$database=null)  
+    public function addJoinClause($local_table,$local_key,$foreign_table,$foreign_table_alias,$foreign_key,$join_type,$database=null)  
     {
         if($database == null)
         {
-            $this->from[] = $foreign_table;
+            $this->from[] = "$foreign_table $foreign_table_alias";
         }
         else
         {
-            $this->from[] = $database.'.'.$foreign_table;
+            $this->from[] = "{$database}.{$foreign_table} {$foreign_table_alias}";
         }
         
         switch(strtolower($join_type))
@@ -205,7 +218,7 @@ class ActiveTable_SQL_Oracle implements ActiveTable_SQL
 
             case 'inner':
             {
-                $this->where[] = "{$local_table}.{$local_key} = {$foreign_table}.{$foreign_key}";
+                $this->where[] = "{$local_table}.{$local_key} = {$foreign_table_alias}.{$foreign_key}";
 
                 break;
             } // end inner

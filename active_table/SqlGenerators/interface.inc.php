@@ -2,7 +2,7 @@
 /**
  * Interfaces for building a new SQL generator for ActiveTablee.
  *
- * @package    ActiveTable 
+ * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
  * @version    1.8.0
@@ -18,6 +18,11 @@
  *    // . . . required methods . . . 
  * }
  * </code>
+ *
+ * @package    ActivePHP 
+ * @author     OwlManAtt <owlmanatt@gmail.com> 
+ * @copyright  2007, Yasashii Syndicate
+ * @version    Release: @package_version@
  */
 interface ActiveTable_SQL
 {
@@ -86,13 +91,14 @@ interface ActiveTable_SQL
      * @param string The local table (one already available to the query).
      * @param string The key in the local table.
      * @param string The table being joined to.
+     * @param string An alias for the table being joined to.
      * @param string The key in the table we are joining to that will be matched on.
      * @param string inner|left, support differs depending on your driver.
      * @param string The database to look in.
      * 
      * @return void
      */
-    public function addJoinClause($local_table,$local_key,$foreign_table,$foreign_key,$join_type,$database=null);
+    public function addJoinClause($local_table,$local_key,$foreign_table,$foreign_table_alias,$foreign_key,$join_type,$database=null);
 
     /**
      * Register columns to operate upon.
@@ -104,6 +110,12 @@ interface ActiveTable_SQL
      * @return void
      */
     public function addKeys($table,$COLUMNS,$table_id='x');
+
+    /**
+     * Register 'virtual' columns to operate on.
+     *
+     **/
+    public function addVirtualKey($statement,$index);
     
     /**
      * Register ...TODO

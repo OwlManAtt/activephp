@@ -2,12 +2,20 @@
 /**
  * Classes for writing MySQL 4 and 5 compatible queries.
  *
- * @package    ActiveTable 
+ * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
  * @version    1.8.0
  */
 
+/**
+ * MySQL SQL driver for ActiveTable.
+ *
+ * @package    ActivePHP 
+ * @author     OwlManAtt <owlmanatt@gmail.com> 
+ * @copyright  2007, Yasashii Syndicate
+ * @version    Release: @package_version@
+ **/
 class ActiveTable_SQL_MySQL implements ActiveTable_SQL
 {   
     protected $columns = array();
@@ -180,6 +188,11 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
         } // end column loop
 
     } // end addKeys
+
+    public function addVirtualKey($statement,$index)
+    {
+        $this->columns[] = "$statement AS `cVIRT_$index`";
+    } // end addVirtualKey
     
     public function getDescribeTable($table_name,$database=null)
     {
@@ -194,7 +207,7 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
     } // end getDescribeTable
     
     // public function addJoinClause($LOOKUPS)
-    public function addJoinClause($local_table,$local_key,$foreign_table,$foreign_key,$join_type,$database=null)
+    public function addJoinClause($local_table,$local_key,$foreign_table,$foreign_table_alias,$foreign_key,$join_type,$database=null)
     {
         $join = '';
         switch(strtolower($join_type))
@@ -221,7 +234,7 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
             } // end inner
         } // end join switch
 
-        $this->join[] = "$join `{$foreign_table}` ON `{$local_table}`.`{$local_key}` = `{$foreign_table}`.`{$foreign_key}`";
+        $this->join[] = "$join `{$foreign_table}` `{$foreign_table_alias}` ON `{$local_table}`.`{$local_key}` = `{$foreign_table_alias}`.`{$foreign_key}`";
     } // end addJoinClause
 
     public function getLastInsertId()

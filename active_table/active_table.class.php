@@ -2,13 +2,15 @@
 /**
  * An implementation of the ActiveRecord pattern at its most basic. 
  *
- * {@tutorial aphp/README}
- *
- * @package    ActiveTable 
+ * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
  * @version    1.8.0
- */
+ **/
+
+/**
+ * SQL generator libraries.
+ **/
 require_once('SqlGenerators/interface.inc.php');
 require_once('SqlGenerators/mysql.class.php');
 require_once('SqlGenerators/oci.class.php');
@@ -17,6 +19,8 @@ require_once('SqlGenerators/oci.class.php');
  * The base class that implements all of the magic for your child classes.
  * This class itself should never be instantiated; extend this object and
  * set the table_name / primary_key attributes to get it working.
+ *
+ * @example ActiveTable.pkg Demonstration on how to use ActiveTable in a few different ways.
  *
  * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
@@ -31,6 +35,19 @@ class ActiveTable
      * @var object
      */
     protected $db;
+
+    /**
+     * The arguments passed to the constructor, minus the required DB.
+     * 
+     * This is used for findBy - in the event that a user defines a
+     * custom constructor with more than just the required DB connector,
+     * the same things that were passed to the creator will be given to the
+     * instances being instantiated. 
+     *
+     * @internal
+     * @var array
+     **/
+    protected $CONSTRUCTOR_ARGS = array();
 
     /**
      * An ActiveTable_SQL_* instance to be used for writing SQL statements.
@@ -65,7 +82,7 @@ class ActiveTable
      * Note that (at this time) ActivePHP does -not- support compound primary
      * keys or primary keys that are not auto-incrementing.
      *
-     * @var string
+     * @var string|array
      */
     protected $primary_key = null;
 
@@ -90,6 +107,7 @@ class ActiveTable
      *    local_key => <em>the key in $this table</em>
      *    foreign_key => <em>the key in your lookup table</em>
      *    foreign_table => <em>the lookup table's name</em>
+     *    foreign_table_alias => <em>the lookup table's alias (needed to join to the same table >1 times)</em>
      *    join_type => <em>inner</em>|<em>left</em>
      *    write => <em>false</em>|<em>true</em>
      *    filter => @See the findBy documentation. Pass one of those arrays.@ 
@@ -98,6 +116,82 @@ class ActiveTable
      * @var array
      */
     protected $LOOKUPS = array();
+
+    /**
+     * Additional clauses to add to a <em>SELECT col1, col2...</em>. This will
+     * allow you to get 'virtual' columns, such as the result of MySQL's IF(foo=1,'YES','NO').
+     *
+     * Specify them in this format:
+     *
+     * <code>
+     * protected $VIRTUAL = array(
+     *    'attribute_name' => "IF(foo=1,'YES','NO')",
+     *    'math_result' => "1+2",
+     * );
+     * </code>
+     *
+     * The array key you assign will be the name of the attribute you use when getting the data, ie:
+     *  
+     * <code>echo $foo->getAttributeName().' '.$foo->getMathResult()."\n";</code>
+     *
+     * If there are name collisions, you can resolve them by using the #get() method directly. Specify
+     * '__virtual' as the tablename.
+     *
+     * @var array
+     **/
+    protected $VIRTUAL = array();
+
+    /** 
+     * An array of 'related' classes/tables to prepare to load.
+     *
+     * This will pre-load the IDs for related records when an instance
+     * of this class is loaded. Further methods will be available for
+     * causing the IDs to be loaded into objects. See the README and __call
+     * documentation for details on those methods.
+     *
+     * Define the related classes as such:
+     * 
+     * <code>
+     * protected $RELATED = array(
+     *   'record_set' => array( // Verbose example.
+     *       'class' => 'Tags',
+     *       'local_table' => 'table_from_this_class', // Defaults to the 'primary' table.
+     *       'local_key' => 'id_a',
+     *       'foreign_table' => 'table_from_other_class', // Defaults to the 'primary' table.
+     *       'foreign_key' => 'id_z',
+     *       'foreign_primary_key' => 'table_from_other_class_id', // Defaults to the PK.
+     *       'foreign_database' => 'db', // optional
+     *   ),
+     *   'users' => array( // Minimalistic example.
+     *       'class' => 'User',
+     *       'local_key' => 'group_id',
+     *       'foreign_key' => 'group_id',
+     *   ),
+     * );
+     * </code>
+     * 
+     * Note that each definition has a key; 'record_set' and 'users' will be the names
+     * that the sets can be retrieved by.
+     *
+     * @var array
+     **/
+    protected $RELATED = array();
+
+    /**
+     * The internal list of related object PKs.
+     *
+     * @internal
+     * @var array
+     **/
+    protected $RELATED_IDS = array();
+
+    /**
+     * The internal list of related (loaded) objects.
+     *
+     * @internal
+     * @var array
+     **/
+    protected $RELATED_OBJECTS = array();
 
     /**
      * The state that this row is in. It is either 'new' or 'loaded'. Depending
@@ -126,6 +220,15 @@ class ActiveTable
      * @internal
      */
     protected $LOOKUPS_DATA = array();
+
+    /**
+     * This is an array that contains virtual attributes (ie, the result of
+     * some function).
+     *
+     * @var array
+     * @internal
+     **/
+    protected $VIRTUAL_DATA = array();
 
     /**
      * Set this to true to enable debugging.
@@ -212,6 +315,12 @@ class ActiveTable
             {
                 throw new ArgumentError('You cannot specify the local table as a foreign table at this time.',910);
             }
+
+            if(array_key_exists('foreign_table_alias',$LOOKUP) == false)
+            {
+                $this->LOOKUPS[$id]['foreign_table_alias'] = $LOOKUP['foreign_table'];
+            }
+
             if($LOOKUP['local_table'] == null)
             {
                 $this->LOOKUPS[$id]['local_table'] = $this->table_name;
@@ -227,6 +336,75 @@ class ActiveTable
                 $this->LOOKUPS_DATA[$LOOKUP['foreign_table']] = $this->load_fields($LOOKUP['foreign_table']);
             }
         } // end lookup validations
+
+        // Validate the associated record set definitions and clean up some data.
+        /*
+        * 'record_set' => array(
+        *    'class' => 'Tags',
+        *    'local_table' => 'table_from_this_class',
+        *    'local_key' => 'id_a',
+        *    'foreign_table' => 'table_from_other_class',
+        *    'foreign_key' => 'id_z',
+        *    'foreign_primary_key' => 'id_z',
+        * ),
+        */
+
+        foreach($this->RELATED as $record_set_name => $SET_DEFINITION)
+        {
+            if(array_key_exists('class',$SET_DEFINITION) == false)
+            {
+                throw new ArgumentError("Class not defined in record set $record_set_name.",911);
+            }
+
+            if(class_exists($SET_DEFINITION['class']) == false)
+            {
+                throw new ArgumentError("The class for record set $record_set_name is not a defined class.",916);
+            }
+
+            // For inspecting.
+            eval('$tmp = new '.$SET_DEFINITION['class'].'($this->db'.$arg_fragment.');');
+
+            if(array_key_exists('local_table',$SET_DEFINITION) == false)
+            {
+                $this->RELATED[$record_set_name]['local_table'] = $this->table_name;
+            }
+
+            if(array_key_exists('local_key',$SET_DEFINITION) == false)
+            {
+                throw new ArgumentError("Local key not definedin record set $record_set_name.",912);
+            }
+
+            if(array_key_exists('foreign_table',$SET_DEFINITION) == false)
+            {
+                $this->RELATED[$record_set_name]['foreign_table'] = $tmp->tableName();
+            }
+            
+            if(array_key_exists('foreign_key',$SET_DEFINITION) == false)
+            {
+                throw new ArgumentError("Foreign key not definedin record set $record_set_name.",914);
+            }
+            
+            if(array_key_exists('foreign_primary_key',$SET_DEFINITION) == false)
+            {
+                $this->RELATED[$record_set_name]['foreign_primary_key'] = $tmp->primaryKey();
+            }
+
+            if(array_key_exists('foreign_database',$SET_DEFINITION) == false)
+            {
+                $this->RELATED[$record_set_name]['foreign_database'] = $tmp->database();
+            }
+
+            // Intialize the ID list.
+            $this->RELATED_IDS[$record_set_name] = array();
+        } // end related set validation
+
+        // Handle additional arguments.
+        $args = func_get_args();
+        if(sizeof($args) > 1)
+        {
+            array_shift($args); 
+            $this->CONSTRUCTOR_ARGS = $args;
+        } // end args > 1
         
     } // end __construct
 
@@ -241,8 +419,46 @@ class ActiveTable
     } // end sysdate
 
     /**
+     * Initiate a database transaction by disabling autocommit.
+     *
+     * @return void
+     **/
+    public function beginTransaction()
+    {
+        $this->db->autoCommit(false);
+
+        return null;
+    } // end beginTransaction
+
+    /**
+     * Commit a transaction and re-enable autocommit.
+     *
+     * @return void
+     **/
+    public function commitTransaction()
+    {
+        $this->db->commit();
+        $this->db->autoCommit(true);
+
+        return null;
+    } // end commitTransaction
+
+    /**
+     * Roll back a transaction and re-enable autocommit.
+     *
+     * @return void
+     **/
+    public function rollbackTransaction()
+    {
+        $this->db->rollback();
+        $this->db->autoCommit(true);
+
+        return null;
+    } // end rollbackTransaction
+
+    /**
      * Magic method that any calls to undefined methods get routed to.
-     * This provides the get*(), set*(), and findBy*() methods.
+     * This provides the #get*(), #set*(), #grab*(), and #findBy*() methods.
      *
      * @internal
      */
@@ -298,6 +514,12 @@ class ActiveTable
             
             // $property_name;
             $value = $parameters[0];
+           
+            $ORDER = "";
+            if($parameters[1] != null)
+            {
+                $ORDER = $parameters[1];
+            }
             
             $params = array();
             $params[] = array(
@@ -305,10 +527,24 @@ class ActiveTable
                 'column' => $property_name,
                 'value' => $value,
             );
-            $ROWS = $this->findBy($params);
+            $ROWS = $this->findBy($params,$ORDER);
         
             return $ROWS;
         } // end finder
+        elseif(preg_match('/^grab([A-Z][A-Za-z0-9_]*)$/',$method,$FOUND) == true)
+        {
+            $set_name = $this->convert_camel_case($FOUND[1]);
+            $set_name = strtolower($set_name);
+            
+            // The array in RELATED_OBJECTS is not created for the set until loaded.
+            // This keeps a difference between non-loaded and loaded-but-zero-rows-returned. 
+            if(array_key_exists($set_name,$this->RELATED_OBJECTS) == false)
+            {
+                $this->load_recordset($set_name);
+            }
+
+            return $this->RELATED_OBJECTS[$set_name];
+        } // end load record sets
 
         return false;
     } // end __call
@@ -326,12 +562,18 @@ class ActiveTable
      **/
     public function get($column,$table=null)
     {
+        $column = strtolower($column);
+        
         if($table == null)
         {
             // Try here first:
             if(array_key_exists($column,$this->DATA) == true)
             {
                 return $this->DATA[$column];
+            }
+            elseif(array_key_exists($column,$this->VIRTUAL_DATA) == true)
+            {
+                return $this->VIRTUAL_DATA[$column];
             }
             else
             {
@@ -355,6 +597,10 @@ class ActiveTable
                     return $this->DATA[$column];
                 }
             } // end look in default table
+            elseif($table == '__virtual')
+            {
+                return $this->VIRTUAL_DATA[$column];
+            }
             else
             {
                 if(array_key_exists($table,$this->LOOKUPS_DATA) == true)
@@ -500,7 +746,24 @@ class ActiveTable
         $SET = array();
         while($resource->fetchInto($row))
         {
-            eval('$tmp = new '.get_class($this).'($this->db);');
+            // If things were passed to this instance's constructor (additonal db connectors?),
+            // then pass them on to what we're finding.
+            $arg_fragment = '';
+            if(sizeof($this->CONSTRUCTOR_ARGS) > 0)
+            {
+                $keys = array_keys($this->CONSTRUCTOR_ARGS);
+                $arg_fragment = array();
+                
+                foreach($keys as $key)
+                {
+                    $arg_fragment[] = '$this->CONSTRUCTOR_ARGS['.$key.']';
+                } // end key loop
+
+                $arg_fragment = ','.implode(',',$arg_fragment);
+                
+            } // end additional constructor arg handler
+            
+            eval('$tmp = new '.get_class($this).'($this->db'.$arg_fragment.');');
             $tmp->load(array_shift($row));
             $SET[] = $tmp;
         } // end loop
@@ -550,9 +813,24 @@ class ActiveTable
             foreach($this->LOOKUPS as $table_index_number => $LOOKUP)
             {
                 $fkeys[$table_index_number] = array_keys($this->load_fields($LOOKUP['foreign_table']));
-                $this->sql_generator->addKeys($LOOKUP['foreign_table'],$fkeys[$table_index_number],$table_index_number);
+                $this->sql_generator->addKeys($LOOKUP['foreign_table_alias'],$fkeys[$table_index_number],$table_index_number);
             } // end loopup loop
         } // end lookups > 0
+        
+        if(sizeof($this->VIRTUAL) > 0)
+        {
+            // This is used below - but only do it once and only if there's virtual attributes
+            // to consider.
+            $virt_map = array_keys($this->VIRTUAL);
+            
+            $i = 0;
+            foreach($this->VIRTUAL as $virtual_key => $function_fragment)
+            {
+                $this->sql_generator->addVirtualKey($function_fragment,$i);
+
+                $i++;
+            } // end virtual loop
+        } // end virtual > 0
         
         $this->sql_generator->addFrom($this->table_name,$this->database);
         
@@ -594,16 +872,24 @@ class ActiveTable
                     $column = array_keys($this->DATA);
                     $column = $column[$column_id];
                 }
+                elseif($table_id == 'virt')
+                {
+                    $table = 'VIRT';
+                    $this->VIRTUAL_DATA[$virt_map[$column_id]] = $value;
+                }
                 else
                 {
-                    $table = $this->LOOKUPS[$table_id]['foreign_table'];
+                    $table = $this->LOOKUPS[$table_id]['foreign_table_alias'];
                     $column = $fkeys[$table_id][$column_id];
                 } // end table name resolver
-
                 
                 if($table == $this->table_name)
                 {
                     $this->DATA[$column] = $value;
+                }
+                elseif($table == 'VIRT')
+                {
+                    $this->VIRTUAL_DATA[$virt_map[$column_id]] = $value;
                 }
                 else
                 {
@@ -613,6 +899,12 @@ class ActiveTable
 
             $this->record_state = 'loaded';
         } // end got result array
+
+        // Load the related IDs.
+        foreach($this->RELATED as $record_set_name => $SET_DEFINITION)
+        {
+            $this->RELATED_IDS[$record_set_name] = $this->load_recordset_id_list($SET_DEFINITION); 
+        } // end related load loop
 
         if($this->record_state == 'loaded')
         {
@@ -748,6 +1040,7 @@ class ActiveTable
             {
                 throw new SQLError($resource->getDebugInfo(),$resource->userinfo,907);
             }
+            $this->debug($resource->userinfo,'sql');
 
             // TODO
             // PEAR::DB offers no way to get back the last_insert_id in a generic way.
@@ -772,6 +1065,7 @@ class ActiveTable
             {
                 throw new SQLError($resource->getDebugInfo(),$resource->userinfo,909);
             }
+            $this->debug($resource->userinfo,'sql');
 
             $id = $this->DATA[$this->primary_key];
 
@@ -814,6 +1108,24 @@ class ActiveTable
         
         return true;
     } // end debug
+
+    /* ====================================================================================== */
+    /* ================== Informational doodads for inspecting the objects. ================= */
+    /* ====================================================================================== */
+    public function tableName()
+    {
+        return $this->table_name;
+    } // end tableName
+
+    public function primaryKey()
+    {
+        return $this->primary_key;
+    } // end primaryKey
+
+    public function database()
+    {
+        return $this->database;
+    } // end database
 
     /* ====================================================================================== */
     /* ===== Implementation details. These are irrelevant. Do not read below this line. ===== */
@@ -859,6 +1171,87 @@ class ActiveTable
         return $RESULT;
     } // end load_fields
 
+    private function load_recordset_id_list($RELATED)
+    {
+        /*
+        * 'record_set' => array( // Verbose example.
+        *     'class' => 'Tags',
+        *     'local_table' => 'table_from_this_class', // Defaults to the 'primary' table.
+        *     'local_key' => 'id_a',
+        *     'foreign_table' => 'table_from_other_class', // Defaults to the 'primary' table.
+        *     'foreign_key' => 'id_z',
+        *     'foreign_primary_key' => 'table_from_other_class_id', // Defaults to the PK.
+        *     'foreign_database' => 'db', // optional
+        * ),
+        * 
+        * SELECT $foreign_primary_key 
+        * FROM foreign_table 
+        * INNER JOIN $local_table ON $local_table.$local_key = $foreign_table.$foreign_key
+        */
+
+        $this->sql_generator->reset();
+        $this->sql_generator->addKeys($RELATED['foreign_table'],array($RELATED['foreign_primary_key']));
+        $this->sql_generator->addFrom($RELATED['foreign_table'],$RELATED['foreign_database']);
+        $this->sql_generator->addJoinClause($RELATED['foreign_table'],$RELATED['foreign_key'],$RELATED['local_table'],$RELATED['local_table'],$RELATED['local_key'],'inner',$RELATED['foreign_database']);
+        $this->sql_generator->addWhere($RELATED['local_table'],$RELATED['local_key']);
+        $sql = $this->sql_generator->getQuery('select');
+        $this->sql_generator->reset();
+
+        $resource = $this->db->query($sql,array($this->get($this->primary_key,$this->table_name)));
+        
+        if(PEAR::isError($resource))
+        {
+            throw new SQLError($resource->getDebugInfo(),$resource->userinfo,100);
+        }
+
+        $IDS = array();
+        while($resource->fetchInto($ROW))
+        {
+            $IDS[] = $ROW['cx_0'];
+        }
+
+        return $IDS;
+    } // end load_recordset_id_list
+    
+    /**
+     * This loads a set of objects that correspond to an entry in RELATED.
+     *
+     * @internal
+     * @param string The name of the record set to be loaded.
+     * @throws ArgumentError ArgumentErrors will be thrown if the record set specified
+     *                       is not actually defined.
+     * @return void
+     **/
+    private function load_recordset($record_set_name)
+    {
+        if(array_key_exists($record_set_name,$this->RELATED) == false)
+        {
+            throw new ArgumentError("Invalid record set '$record_set_name' specified.",915);
+        }
+
+        // Alias.
+        $SET = $this->RELATED[$record_set_name];
+        $IDS = $this->RELATED_IDS[$record_set_name];
+        $this->RELATED_OBJECTS[$record_set_name] = array();
+
+        // This should never happen...the first exception would be thrown instead...but just in case something
+        // happens to the instance's state...
+        if(is_array($IDS) == false)
+        {
+            throw new ArgumentError("Record ID array for $record_set_name was not created. Please report this error.",25);
+        }
+
+        foreach($IDS as $id)
+        {
+            eval('$tmp = new '.$SET['class'].'($this->db);');
+            $tmp->load($id);
+
+            $this->RELATED_OBJECTS[$record_set_name][] = $tmp;
+        } // end ID load loop
+        
+        return true;
+    } // end load_recordset
+
     /**
      * Convert the pretty setSomeAttribute to some_attribute for use elsewhere. 
      *
@@ -879,7 +1272,7 @@ class ActiveTable
             $FILTER_VALUES = array();
             foreach($LOOKUPS as $LOOKUP)
             {
-                $this->sql_generator->addJoinClause($LOOKUP['local_table'],$LOOKUP['local_key'],$LOOKUP['foreign_table'],$LOOKUP['foreign_key'],$LOOKUP['join_type'],$LOOKUP['database']);
+                $this->sql_generator->addJoinClause($LOOKUP['local_table'],$LOOKUP['local_key'],$LOOKUP['foreign_table'],$LOOKUP['foreign_table_alias'],$LOOKUP['foreign_key'],$LOOKUP['join_type'],$LOOKUP['database']);
 
                 if(array_key_exists('filter',$LOOKUP) == true)
                 {
@@ -949,9 +1342,11 @@ class ActiveTable
                 }
                 
                 $this->sql_generator->addWhere($value['table'],$value['column'],$in_type,sizeof($value['value']));
+
+                $search_value = array();
                 foreach($value['value'] as $in_val)
                 {
-                    $search_value = $in_val;
+                    $search_value[] = $in_val;
                 }
             } // end in
             else

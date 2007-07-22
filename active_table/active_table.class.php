@@ -5,7 +5,7 @@
  * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
- * @version    1.9.0
+ * @version    1.8.0
  **/
 
 /**
@@ -103,15 +103,17 @@ class ActiveTable
      * 
      * For each lookup table, add an array with the following to the LOOKUPS array:
      *
-     * Array (
-     *    local_key => <em>the key in $this table</em>
-     *    foreign_key => <em>the key in your lookup table</em>
-     *    foreign_table => <em>the lookup table's name</em>
-     *    foreign_table_alias => <em>the lookup table's alias (needed to join to the same table >1 times)</em>
-     *    join_type => <em>inner</em>|<em>left</em>
-     *    write => <em>false</em>|<em>true</em>
-     *    filter => @See the findBy documentation. Pass one of those arrays.@ 
-     * )
+     * <code>
+     * array (
+     *    'local_key' => 'the key in $this table',
+     *    'foreign_key' => 'the key in your lookup table',
+     *    'foreign_table' => 'the lookup table's name',
+     *    'foreign_table_alias' => 'the lookup table's alias (needed to join to the same table >1 times)',
+     *    'join_type' => 'inner|left',
+     *    'write' => false|true,
+     *    'filter' => 'See the findBy documentation. Pass one of those arrays.',
+     * );
+     * </code>
      *
      * @var array
      */
@@ -535,19 +537,30 @@ class ActiveTable
         {
             $set_name = $this->convert_camel_case($FOUND[1]);
             $set_name = strtolower($set_name);
-            
-            // The array in RELATED_OBJECTS is not created for the set until loaded.
-            // This keeps a difference between non-loaded and loaded-but-zero-rows-returned. 
-            if(array_key_exists($set_name,$this->RELATED_OBJECTS) == false)
-            {
-                $this->load_recordset($set_name);
-            }
-
-            return $this->RELATED_OBJECTS[$set_name];
+           
+            return $this->grab($set_name); 
         } // end load record sets
 
         return false;
     } // end __call
+
+    /**
+     * Grab RELATED record set.
+     *
+     * @param string
+     * @return array
+     **/
+    public function grab($record_set)
+    {
+        // The array in RELATED_OBJECTS is not created for the set until loaded.
+        // This keeps a difference between non-loaded and loaded-but-zero-rows-returned. 
+        if(array_key_exists($record_set,$this->RELATED_OBJECTS) == false)
+        {
+            $this->load_recordset($record_set);
+        }
+
+        return $this->RELATED_OBJECTS[$record_set];
+    } // end grab
 
     /**
      * Get the value back for a column from a row.
@@ -1197,7 +1210,8 @@ class ActiveTable
         $sql = $this->sql_generator->getQuery('select');
         $this->sql_generator->reset();
 
-        $resource = $this->db->query($sql,array($this->get($this->primary_key,$this->table_name)));
+        $this->debug($sql,'sql');
+        $resource = $this->db->query($sql,array($this->get($RELATED['local_key'],$RELATED['local_table'])));
         
         if(PEAR::isError($resource))
         {

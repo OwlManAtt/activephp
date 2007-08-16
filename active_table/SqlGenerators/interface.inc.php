@@ -5,7 +5,7 @@
  * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
- * @version    1.9.0
+ * @version    2.2.0
  */
 
 /**
@@ -27,15 +27,26 @@
 interface ActiveTable_SQL
 {
     /**
-     * Clear the SQL generator instance's cache out.
+     * Certain RDBMSes (like Oracle) support 'magic' columns that can be used
+     * as primary keys. Set this to that column name (ie rowid for Oracle) and
+     * that will be added to your SQL statements. 
+     * 
+     * @return string|null 
+     */
+    public function getMagicPkName();
+
+    /**
+     * Generate a WHERE fragment for use with PEAR::DB's autoexecute functionality.
      *
-     * This is to be called whenever a SQL statement has been set
-     * up and pulled out. 
-     *  
+     * If this returns null, a default string will be generated.
+     * This is most useful for things like Oracle, where CHARTOROWID() needs to be
+     * called to turn the string back into an object Oracle can work with.
+     * 
+     * @param scalar $value 
      * @return void
      */
-    public function reset();
-   
+    public function getMagicUpdateWhere($table,$value,&$db);
+    
     /**
      * Return the SQL statement to get the PK for the last row inserted. 
      *
@@ -43,7 +54,7 @@ interface ActiveTable_SQL
      *
      * @return string The SQL statement.
      */ 
-    public function getLastInsertId();
+    public function getLastInsertId($table);
 
     /**
      * Return the SQL statement that performs a describe table.

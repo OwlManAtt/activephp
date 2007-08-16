@@ -4,7 +4,7 @@
 ===========================================
 ===========================================
 === Author:    OwlManAtt                ===
-=== Updated:   2007-04-25               ===
+=== Updated:   2007-08-16               ===
 ===========================================
 
 == Overview ==
@@ -20,7 +20,7 @@ database this library can interact with can be resolved easily.
 ActiveTable requires the following:
 
 * PHP 5 (5.1 preferred)
-    * PEAR and the PEAR::DB package.
+    * PEAR and the PEAR::DB and PEAR::Log packages.
 * MySQL, Oracle (see note below regarding Oracle)
 * Table(s) with an auto-incrememting primary key.
 
@@ -28,5 +28,6 @@ ActiveTable requires the following:
 Please see the example file in docs/ for example uses.
 
 == Notes on Oracle ==
-At this time, ActiveTable will perform read-only operations on Oracle tables. Write operations (INSERT, specifically)
-will not behave as expected. 
+ActiveTable uses the Oracle rowid internally. Unless you have an auto-incrementing integer
+in your Oracle table, it is strongly advised that you set the primary_key to rowid for any Oracle
+tables.

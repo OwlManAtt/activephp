@@ -5,7 +5,7 @@
  * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
- * @version    1.9.0
+ * @version    2.2.0
  */
 
 /**
@@ -24,23 +24,22 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
     protected $where = array();
     protected $order = '';
     protected $limit = '';
+    public $magic_pk_name = null;
 
     public function __construct()
     {
-        // Initialize
-        $this->reset();
-
+        return null;
     } // end __construct
 
-    public function reset()
+    public function getMagicPkName()
     {
-        $this->columns = array();
-        $this->from = '';
-        $this->join = array();
-        $this->where = array();
-        $this->order = '';
-        $this->limit = '';
-    } // end reset
+        return null;
+    } // end getMagicPkName
+
+    public function getMagicUpdateWhere($table,$value,&$db)
+    {
+        return null;
+    } // end getMagicUpdateWhere
 
     public function getFormattedDate($datetime)
     {
@@ -137,7 +136,16 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
                     $in = 'NOT IN';
                 }
                 
-                $placeholders = implode(',',array_fill(0,$count,'?'));
+                if($count > 0)
+                {
+                    $placeholders = implode(',',array_fill(0,$count,'?'));
+                }
+                else
+                {
+                    // Prevent INs with no IDs from generating invalid SQL.
+                    throw new ArgumentError('Attempting to do IN with no data.');
+                }
+                
                 $this->where[] = "`$table`.`$column` $in ($placeholders)";
     
                 break;
@@ -160,6 +168,24 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
     
                 break;
             } // end is, is_not
+            
+            case 'like':
+            case 'not_like':
+            {
+                $like = '';
+                if($type == 'like')
+                {
+                    $like = 'LIKE';
+                }
+                elseif($type == 'not_like')
+                {
+                    $like = 'NOT LIKE';
+                }
+                
+                $this->where[] = "`$table`.`$column` $like ?";
+
+                break;
+            } // end like, not_like
 
             default:
             {
@@ -237,9 +263,9 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
         $this->join[] = "$join `{$foreign_table}` `{$foreign_table_alias}` ON `{$local_table}`.`{$local_key}` = `{$foreign_table_alias}`.`{$foreign_key}`";
     } // end addJoinClause
 
-    public function getLastInsertId()
+    public function getLastInsertId($table)
     {
-
+        return "SELECT last_insert_id() AS last_insert_id";
     } // end getLastInsertId
 } // end ActiveTable_MySQL_SQL
 

@@ -5,7 +5,7 @@
  * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
- * @version    1.8.0
+ * @version    2.2.0
  **/
 
 /**
@@ -50,12 +50,13 @@ class ActiveTable
     protected $CONSTRUCTOR_ARGS = array();
 
     /**
-     * An ActiveTable_SQL_* instance to be used for writing SQL statements.
+     * An ActiveTable_SQL_* class to be used for writing SQL statements.
      *
      * The appropriate driver for your database will be determined in the constructor.
      * The DSN for the PEAR::DB connector is examined and the driver is spawned.
      *
-     * @var object
+     * @internal
+     * @var string 
      */
     protected $sql_generator;
 
@@ -238,6 +239,20 @@ class ActiveTable
      * @var boolean
      **/
     public $debug = false;
+
+    /**
+     * The path to write logfiles out to. 
+     * 
+     * @var string
+     */
+    public $logfile_path = '/tmp/active_table.log';
+
+    /** 
+     * Debug messages are stored in this array. 
+     *
+     * @var array
+     **/
+    public $debug_messages = array();
     
     /**
      * The constructor to set up the wrapper object. Give this a PEAR::DB
@@ -261,6 +276,8 @@ class ActiveTable
      */
     public function __construct($db)
     {
+        $start = microtime(true);
+        
         // Ensure this is valid.
         if(is_object($db) == false)
         {
@@ -276,14 +293,14 @@ class ActiveTable
         {
             case 'mysql':
             {
-                $this->sql_generator = new ActiveTable_SQL_MySQL();
+                $this->sql_generator = 'ActiveTable_SQL_MySQL';
 
                 break;
             } // end mysql
 
             case 'oci8':
             {
-                $this->sql_generator = new ActiveTable_SQL_Oracle();
+                $this->sql_generator = 'ActiveTable_SQL_Oracle';
 
                 break;
             } // end oci8
@@ -296,7 +313,6 @@ class ActiveTable
             } // end default
         } // end db connector type switch 
         
-        // TODO - Have it guess these like Ruby's AR can do...
         if($this->table_name == null)
         {
             throw new ArgumentError('No table specified.',902);
@@ -407,7 +423,9 @@ class ActiveTable
             array_shift($args); 
             $this->CONSTRUCTOR_ARGS = $args;
         } // end args > 1
-        
+       
+        $total = round((microtime(true) - $start),4);
+        $this->debug("#__constructt() executed in '$total' seconds.",'method_time'); 
     } // end __construct
 
     /**
@@ -417,7 +435,7 @@ class ActiveTable
      **/
     public function sysdate()
     {
-        return $this->sql_generator->getFormattedDate(date('Y-m-d H:i:s'));
+        return $this->newSqlGenerator()->getFormattedDate(date('Y-m-d H:i:s'));
     } // end sysdate
 
     /**
@@ -460,61 +478,38 @@ class ActiveTable
 
     /**
      * Magic method that any calls to undefined methods get routed to.
-     * This provides the #get*(), #set*(), #grab*(), and #findBy*() methods.
+     * This provides the #get*(), #set*(), #grab*(), #findBy*(), and
+     * #findOneBy() methods.
      *
      * @internal
      */
     public function __call($method,$parameters)
     {
+        $start = microtime(true);
+
         if(preg_match('/^(g|s)et([A-Z][A-Za-z0-9_]*)$/',$method,$FOUND) == true)
         {
             $property_name = $this->convert_camel_case($FOUND[2]);
-            $property_name = strtolower($property_name);
 
             if($FOUND[1] == 'g')
             {
+                $total = round((microtime(true) - $start),4);
+                $this->debug("#__call($method) executed in '$total' seconds.",'method_time'); 
+
                 return $this->get($property_name);
             } // end get
             elseif($FOUND[1] == 's')
             {
-                // TODO - Extract this into a #set($column,$table) like #get() is set up.
-                
-                // Don't let people screw around with the PK... 
-                if($property_name == $this->primary_key && $this->allow_pk_write == false)
-                {
-                    throw new ArgumentError('Cannot modify primary key.',900);
-                }
-                
-                if(array_key_exists($property_name,$this->DATA) == true)
-                {
-                    $this->DATA[$property_name] = $parameters[0];
-                    return null;
-                }
-                else
-                {
-                    // Try to find a +w lookup table's shit...
-                    foreach($this->LOOKUPS as $LOOKUP)
-                    {
-                        if($LOOKUP['write'] == true)
-                        {
-                            if(array_key_exists($property_name,$this->LOOKUPS_DATA[$LOOKUP['foreign_table']]) == true)
-                            {
-                                $this->LOOKUPS_DATA[$LOOKUP['foreign_table']][$property_name] = $parameters[0];
-                                return null;
-                            }
-                        }
-                    } // end lookup loopdewhoop
-                    
-                    throw new ArgumentError("That attribute ($property_name) is not in the domain of the ".get_class($this)." table. Note that lookup'd values are read-only unless otherwise enabled.",901);
-                }
+                $total = round((microtime(true) - $start),4);
+                $this->debug("#__call($method) executed in '$total' seconds.",'method_time');
+
+               return $this->set($parameters[0],$property_name);
             } // end set
         } // end the regexp matched...
         elseif(preg_match('/^findBy([A-Z][A-Za-z0-9_]*)$/',$method,$FOUND) == true)
         {
             $property_name = $this->convert_camel_case($FOUND[1]);
-            $property_name = strtolower($property_name);
             
-            // $property_name;
             $value = $parameters[0];
            
             $ORDER = "";
@@ -530,17 +525,51 @@ class ActiveTable
                 'value' => $value,
             );
             $ROWS = $this->findBy($params,$ORDER);
+       
+            $total = round((microtime(true) - $start),4);
+            $this->debug("#__call($method) executed in '$total' seconds.",'method_time');       
         
             return $ROWS;
         } // end finder
         elseif(preg_match('/^grab([A-Z][A-Za-z0-9_]*)$/',$method,$FOUND) == true)
         {
             $set_name = $this->convert_camel_case($FOUND[1]);
-            $set_name = strtolower($set_name);
-           
+ 
+            $total = round((microtime(true) - $start),4);
+            $this->debug("#__call($method) executed in '$total' seconds.",'method_time');       
+          
             return $this->grab($set_name); 
         } // end load record sets
+        elseif(preg_match('/^findOneBy([A-Z][A-Za-z0-9_]*)$/',$method,$FOUND) == true)
+        {
+            $property_name = $this->convert_camel_case($FOUND[1]);
+            $value = $parameters[0];
+           
+            $ORDER = "";
+            if($parameters[1] != null)
+            {
+                $ORDER = $parameters[1];
+            }
+            
+            $params = array();
+            $params[] = array(
+                'table' => $this->table_name,
+                'column' => $property_name,
+                'value' => $value,
+            );
+            $row = $this->findOneBy($params,$ORDER);
+       
+            $total = round((microtime(true) - $start),4);
+            $this->debug("#__call($method) executed in '$total' seconds.",'method_time');       
+        
+            return $row;
+        } // end findOneBy
 
+        $total = round((microtime(true) - $start),4);
+        $this->debug("#__call() executed in '$total' seconds.",'method_time'); 
+
+        trigger_error("Call to undefined method $method on line ".__LINE__." in ".__FILE__.'.',E_USER_ERROR);
+ 
         return false;
     } // end __call
 
@@ -552,12 +581,18 @@ class ActiveTable
      **/
     public function grab($record_set)
     {
+        $start = microtime(true);
+        
         // The array in RELATED_OBJECTS is not created for the set until loaded.
         // This keeps a difference between non-loaded and loaded-but-zero-rows-returned. 
         if(array_key_exists($record_set,$this->RELATED_OBJECTS) == false)
         {
+            $this->RELATED_IDS[$record_set] = $this->load_recordset_id_list($this->RELATED[$record_set]);
             $this->load_recordset($record_set);
-        }
+        } // end record set not loaded
+
+        $total = round((microtime(true) - $start),4);
+        $this->debug("#grab() executed in '$total' seconds.",'method_time');
 
         return $this->RELATED_OBJECTS[$record_set];
     } // end grab
@@ -575,6 +610,8 @@ class ActiveTable
      **/
     public function get($column,$table=null)
     {
+        $start = microtime(true);
+        
         $column = strtolower($column);
         
         if($table == null)
@@ -582,10 +619,16 @@ class ActiveTable
             // Try here first:
             if(array_key_exists($column,$this->DATA) == true)
             {
+                $total = round((microtime(true) - $start),4);
+                $this->debug("#get() executed in '$total' seconds.",'method_time');
+
                 return $this->DATA[$column];
             }
             elseif(array_key_exists($column,$this->VIRTUAL_DATA) == true)
             {
+                $total = round((microtime(true) - $start),4);
+                $this->debug("#get() executed in '$total' seconds.",'method_time');
+                
                 return $this->VIRTUAL_DATA[$column];
             }
             else
@@ -595,6 +638,9 @@ class ActiveTable
                 {
                     if(array_key_exists($column,$LOOKUP) == true)
                     {
+                        $total = round((microtime(true) - $start),4);
+                        $this->debug("#get() executed in '$total' seconds.",'method_time');
+                        
                         return $LOOKUP[$column];
                     }
                 } // end lookups loop
@@ -607,11 +653,17 @@ class ActiveTable
             {
                 if(array_key_exists($column,$this->DATA) == true)
                 {
+                    $total = round((microtime(true) - $start),4);
+                    $this->debug("#get() executed in '$total' seconds.",'method_time');
+                    
                     return $this->DATA[$column];
                 }
             } // end look in default table
             elseif($table == '__virtual')
             {
+                $total = round((microtime(true) - $start),4);
+                $this->debug("#get() executed in '$total' seconds.",'method_time');
+                
                 return $this->VIRTUAL_DATA[$column];
             }
             else
@@ -620,14 +672,120 @@ class ActiveTable
                 {
                     if(array_key_exists($column,$this->LOOKUPS_DATA[$table]) == true)
                     {
+                        $total = round((microtime(true) - $start),4);
+                        $this->debug("#get() executed in '$total' seconds.",'method_time');
+                        
                         return $this->LOOKUPS_DATA[$table][$column];
                     }
                 }
             } // end look in JOIN'd table
         } // end table specified - look it up.
         
+        $total = round((microtime(true) - $start),4);
+        $this->debug("#get() executed in '$total' seconds.",'method_time');
+
         return null; 
     } // end get
+
+    /**
+     * Set the value for a column.
+     *
+     * It is preferred to use the shorthand, #setColumnName(), but in some cases
+     * where JOINs cause column name collisions (status_a.description, status_b.description - which 
+     * should #setDescription() look at?), this may be used and the table may be specified.
+     *
+     * @param mixed The new value.
+     * @param string The column name to update.
+     * @param string|void The table name to look in. If blank, a search is done and the first occurance is updated.
+     * @return string|integer|boolean The value.
+     **/
+    public function set($value,$column,$table=null)
+    {
+        $start = microtime(true);
+        
+        $column = strtolower($column);
+
+        if($column == $this->primary_key && $this->allow_pk_write == false)
+        {
+            throw new ArgumentError('Cannot modify primary key.',900);
+        }
+        
+        if($table != null)
+        {
+            if($table == $this->table_name)
+            {
+                if(array_key_exists($column,$this->DATA) == true)
+                {
+                    $this->DATA[$column] = $value;
+
+                    $total = round((microtime(true) - $start),4);
+                    $this->debug("#set() executed in '$total' seconds.",'method_time');
+                    
+                    return null;
+                } // end key exists in primary tabl;e
+            } // end table is primary
+            else
+            {
+                if(array_key_exists($table,$this->LOOKUPS_DATA) == true)
+                {
+                    // Find the table and see if it's +w.
+                    foreach($this->LOOKUPS as $LOOKUP)
+                    {
+                        if($LOOKUP['foreign_table'] == $table)
+                        {
+                            if($LOOKUP['write'] == true)
+                            {
+                                if(array_key_exists($column,$this->LOOKUPS_DATA[$table]) == true)
+                                {
+                                    $this->LOOKUPS_DATA[$table][$column] = $value;
+
+                                    $total = round((microtime(true) - $start),4);
+                                    $this->debug("#set() executed in '$total' seconds.",'method_time');
+                                    
+                                    return null;
+                                }
+                            } // end +w = true
+                            break;
+                        } // end tables match
+                    } // end lookup loop
+                } // end ensure table exists    
+            } // end lookup table
+        } // end table specified
+        else
+        {
+            if(array_key_exists($column,$this->DATA) == true)
+            {
+                $this->DATA[$column] = $value;
+
+                $total = round((microtime(true) - $start),4);
+                $this->debug("#set() executed in '$total' seconds.",'method_time');
+                
+                return null;
+            }
+            else
+            {
+                // Try to find a +w lookup table's shit...
+                foreach($this->LOOKUPS as $LOOKUP)
+                {
+                    if($LOOKUP['write'] == true)
+                    {
+                        if(array_key_exists($column,$this->LOOKUPS_DATA[$LOOKUP['foreign_table']]) == true)
+                        {
+                            $this->LOOKUPS_DATA[$LOOKUP['foreign_table']][$column] = $value;
+
+                            $total = round((microtime(true) - $start),4);
+                            $this->debug("#set() executed in '$total' seconds.",'method_time');
+
+                            return null;
+                        }
+                    }
+                } // end lookup loopdewhoop
+                
+                throw new ArgumentError("That attribute ($column) is not in the domain of the ".get_class($this)." table. Note that lookup'd values are read-only unless otherwise enabled.",901);
+            } // end try +w'd lookup tables
+        } // end default search mode
+
+    } // end set
 
     /* ================ */
     /* ===== FIND ===== */
@@ -651,6 +809,22 @@ class ActiveTable
      *      'table' => 'company',   // A table from LOOKUP
      *      'column' => 'type',     // A column from this table.
      *      'value' => 'contractor' // The value to search on.
+     *  );
+     * </code>
+     *
+     * LIKE and NOT LIKE comparisons can be done with the additional 'like' parameter. To do LIKE,
+     * simply specify 'like' => true. This default search_type to '=', but you may explicitly declare 
+     * search_type as '='.
+     *
+     * To do NOT_LIKE, set search_type = <> and like = true.
+     * 
+     * <code>
+     *  $TO_PASS[] = array(
+     *      'table' => 'company',
+     *      'column' => 'type',
+     *      'like' => true,
+     *      'search_type' => '<>',
+     *      'value' => '%contract%'
      *  );
      * </code>
      *
@@ -697,30 +871,41 @@ class ActiveTable
      */
     public function findBy($args,$order_by='')
     {
+        $start = microtime(true);
+        
         if(is_array($args) == false)
         {
             throw new ArgumentError('Args must be an array.',950);
         }
 
-        // Disabling this - We can get every row back with a blank array.
-        // elseif(sizeof($args) <= 0)
-        // {
-        //    throw new ArgumentError('Args cannot be an empty array.',951);
-        // }
-        
         $SEARCH_VALUES = array();
         $AND = array();
             
         // Clear things out.
-        $this->sql_generator->reset();
-        $this->sql_generator->addKeys($this->table_name,array($this->primary_key));
-        $this->sql_generator->addFrom($this->table_name,$this->database);
-        $foo = $this->make_join($this->LOOKUPS);
-        $SEARCH_VALUES = array_merge($SEARCH_VALUES,$foo);
+        $sql_generator = $this->newSqlGenerator();
+
+        $columns = $this->make_columns($sql_generator);
+        $sql_generator = $columns['sql_generator'];
+        
+        $sql_generator->addFrom($this->table_name,$this->database);
+        $foo = $this->make_join($this->LOOKUPS,$sql_generator);
+        $sql_generator = $foo['sql_generator'];
+        
+        if(is_array($foo['search_values']) == true)
+        {
+            $SEARCH_VALUES = array_merge($SEARCH_VALUES,$foo['search_values']);
+        }
+        elseif($foo['search_values'] != null)
+        {
+            $SEARCH_VALUES[] = $foo['search_values'];
+        }
 
         foreach($args as $column => $value)
         {
-            $bar = $this->make_wheres($column,$value);
+            $where = $this->make_wheres($column,$value,$sql_generator);
+            $sql_generator = $where['sql_generator'];
+            $bar = $where['search_values'];
+            
             if($bar !== null)
             {
                 if(is_array($bar) == true)
@@ -732,23 +917,23 @@ class ActiveTable
                     $SEARCH_VALUES[] = $bar; 
                 }
             }
-            else
-            {
-                $SEARCH_VALUES[] = '0';
-            }
+            //else
+            //{
+            //    $SEARCH_VALUES[] = '0';
+            //}
         } // end loop
 
         // TODO - This is taken exactly as-is and put into the query. Probably a *bad* idea...
         if($order_by != null)
         {
-            $this->sql_generator->addOrder($order_by);
+            $sql_generator->addOrder($order_by);
         }
         
-        $sql = $this->sql_generator->getQuery('select');
-        $this->debug($sql,'sql');
-        
+        $sql = $sql_generator->getQuery('select');
         $handle = $this->db->prepare($sql);
-        $resource = $this->db->execute($handle,$SEARCH_VALUES);
+        $resource = $this->execute($handle,$SEARCH_VALUES);
+        $this->debug($this->db->last_query,'sql');
+        
         $this->db->freePrepared($handle);
 
         if(PEAR::isError($resource))
@@ -759,6 +944,8 @@ class ActiveTable
         $SET = array();
         while($resource->fetchInto($row))
         {
+            $RESULT_DATA = $this->parse_columns($row,$columns['lookup_mapping'],$columns['virtual_mapping']);
+            
             // If things were passed to this instance's constructor (additonal db connectors?),
             // then pass them on to what we're finding.
             $arg_fragment = '';
@@ -777,14 +964,39 @@ class ActiveTable
             } // end additional constructor arg handler
             
             eval('$tmp = new '.get_class($this).'($this->db'.$arg_fragment.');');
-            $tmp->load(array_shift($row));
+            $tmp->setUp($RESULT_DATA['primary_table'],$RESULT_DATA['lookup_tables'],$RESULT_DATA['virtual_fields']);
             $SET[] = $tmp;
         } // end loop
+       
+        $total = round((microtime(true) - $start),4);
+        $this->debug("#findBy() executed in '$total' seconds.",'method_time'); 
         
         return $SET;
     } // end findBy
-    
 
+    /**
+     * An alias for #findBy() that returns either an object or null.
+     *
+     * This is an alias for #findBy() that returns the first result or,
+     * if no results are found, null.
+     *
+     * Similarly to #findBy(), #findOneByColumnName($value,'ORDER BY column_foo ASC') is
+     * also supported.
+     *
+     * For further information on the parameters, see #findBy()'s documentation.
+     * 
+     * @param array $ARGS See #findBy()'s first parameter for details.
+     * @param string $order_by An ORDER BY SQL fragment.
+     * @return object 
+     */
+    public function findOneBy($ARGS,$order_by='')
+    {
+        $result = $this->findBy($ARGS,"$order_by LIMIT 1");
+        $result = array_shift($result);
+
+        return $result;
+    } // end findOneBy
+    
     /* ================ */
     /* ===== CRUD ===== */
     /* ================ */
@@ -807,57 +1019,27 @@ class ActiveTable
      */ 
     public function load($pk_id)
     {
-        /*
-        * Column names follow tablename__column_name to avoid collisions. 
-        *                              ^ Note that there are TWO underscores.
-        *
-        * 1. Build column names for the base table & the base SQL statement.
-        * 2. If there are any lookups, build their key names and JOIN clause.
-        */
-        $keys = array_keys($this->DATA);
-        $fkeys = array();
-
-        $this->sql_generator->reset();
-        $this->sql_generator->addKeys($this->table_name,$keys);
+        $start = microtime(true);
         
-        // There are lookup tables - DO IT!
-        if(sizeof($this->LOOKUPS) > 0)
-        {
-            foreach($this->LOOKUPS as $table_index_number => $LOOKUP)
-            {
-                $fkeys[$table_index_number] = array_keys($this->load_fields($LOOKUP['foreign_table']));
-                $this->sql_generator->addKeys($LOOKUP['foreign_table_alias'],$fkeys[$table_index_number],$table_index_number);
-            } // end loopup loop
-        } // end lookups > 0
+        $columns = $this->make_columns($sql_generator);
+        $sql_generator = $columns['sql_generator'];
         
-        if(sizeof($this->VIRTUAL) > 0)
-        {
-            // This is used below - but only do it once and only if there's virtual attributes
-            // to consider.
-            $virt_map = array_keys($this->VIRTUAL);
-            
-            $i = 0;
-            foreach($this->VIRTUAL as $virtual_key => $function_fragment)
-            {
-                $this->sql_generator->addVirtualKey($function_fragment,$i);
-
-                $i++;
-            } // end virtual loop
-        } // end virtual > 0
-        
-        $this->sql_generator->addFrom($this->table_name,$this->database);
+        $sql_generator->addFrom($this->table_name,$this->database);
         
         // A filter on a join might make this more than just the PK... 
-        $SEARCH_VALUES = $this->make_join($this->LOOKUPS);
-        $this->sql_generator->addWhere($this->table_name,$this->primary_key);
+        $join = $this->make_join($this->LOOKUPS,$sql_generator);
+        $sql_generator = $join['sql_generator'];
+        $SEARCH_VALUES = $join['search_values'];
+        $sql_generator->addWhere($this->table_name,$this->primary_key);
         $SEARCH_VALUES[] = $pk_id;
         
-        $this->sql_generator->addLimit(1);
-        $sql = $this->sql_generator->getQuery('select');
-        $this->debug($sql,'sql');
+        $sql_generator->addLimit(1);
+        $sql = $sql_generator->getQuery('select');
 
         $handle = $this->db->prepare($sql);
-        $resource = $this->db->execute($handle,$SEARCH_VALUES);
+        $resource = $this->execute($handle,$SEARCH_VALUES);
+        $this->debug($this->db->last_query,'sql');
+        
         $this->db->freePrepared($handle);
         if(PEAR::isError($resource))
         {
@@ -867,63 +1049,14 @@ class ActiveTable
 
         if(is_array($ROW) == true)
         {
-            foreach($ROW as $key => $value)
-            {
-                $key = strtolower($key);
-                $key = substr($key,1); // Strip off the leading 'c' - used to prevent oracle from crying.
-                
-                $table_id = substr($key,0,strpos($key,'_'));
-                $column_id = substr($key,strpos($key,'_')+1);
+            $RESULT_DATA = $this->parse_columns($ROW,$columns['lookup_mapping'],$columns['virtual_mapping']);
 
-                // Translate this shit back in to something human-readable.
-                // Thank Oracle's 30-character limit on aliases for this x_0
-                // crap.
-                if($table_id == 'x')
-                {
-                    $table = $this->table_name;
+            $total = round((microtime(true) - $start),4);
+            $this->debug("#load() executed in '$total' seconds.",'method_time'); 
 
-                    $column = array_keys($this->DATA);
-                    $column = $column[$column_id];
-                }
-                elseif($table_id == 'virt')
-                {
-                    $table = 'VIRT';
-                    $this->VIRTUAL_DATA[$virt_map[$column_id]] = $value;
-                }
-                else
-                {
-                    $table = $this->LOOKUPS[$table_id]['foreign_table_alias'];
-                    $column = $fkeys[$table_id][$column_id];
-                } // end table name resolver
-                
-                if($table == $this->table_name)
-                {
-                    $this->DATA[$column] = $value;
-                }
-                elseif($table == 'VIRT')
-                {
-                    $this->VIRTUAL_DATA[$virt_map[$column_id]] = $value;
-                }
-                else
-                {
-                    $this->LOOKUPS_DATA[$table][$column] = $value;
-                }
-            } // end row loop
-
-            $this->record_state = 'loaded';
+            return $this->setUp($RESULT_DATA['primary_table'],$RESULT_DATA['lookup_tables'],$RESULT_DATA['virtual_fields']);
         } // end got result array
 
-        // Load the related IDs.
-        foreach($this->RELATED as $record_set_name => $SET_DEFINITION)
-        {
-            $this->RELATED_IDS[$record_set_name] = $this->load_recordset_id_list($SET_DEFINITION); 
-        } // end related load loop
-
-        if($this->record_state == 'loaded')
-        {
-            return true;
-        }
-        
         return false;
     } // end load
 
@@ -943,6 +1076,8 @@ class ActiveTable
      */
     public function destroy($id=null)
     {
+        $start = microtime(true);
+        
         if($id == null)
         {
             $id = $this->DATA[$this->primary_key];
@@ -954,10 +1089,10 @@ class ActiveTable
         }
 
         $sql = "DELETE FROM {$this->table_name} WHERE {$this->primary_key} = ?";
-        $this->debug($sql,'sql');
         
         $handle = $this->db->prepare($sql);
-        $resource = $this->db->execute($handle,array($id));
+        $resource = $this->execute($handle,array($id));
+        $this->debug($this->db->last_query,'sql');
         $this->db->freePrepared($handle);
         if(PEAR::isError($resource))
         {
@@ -967,6 +1102,9 @@ class ActiveTable
         // Load blanks back in to reset the object.
         $this->DATA = $this->load_fields(); 
         $this->record_state = 'new';
+
+        $total = round((microtime(true) - $start),4);
+        $this->debug("#destroy() executed in '$total' seconds.",'method_time');
 
         return true;
     } // end destroy
@@ -990,6 +1128,8 @@ class ActiveTable
      */
     public function create($new_data=array())
     {
+        $start = microtime(true);
+        
         /* 
         * Ideally, this would be a static method that returns to you your record
         * (as a new instance of this object). 
@@ -1015,6 +1155,9 @@ class ActiveTable
             // Pass it up.
             throw $e;
         }
+
+        $total = round((microtime(true) - $start),4);
+        $this->debug("#create() executed in '$total' seconds.",'method_time');
     } // end create
 
     /**
@@ -1028,6 +1171,8 @@ class ActiveTable
      */
     public function save()
     {
+        $start = microtime(true);
+
         $DATA = $this->DATA;
 
         // PEAR::DB will try to insert NULL instead of '' if the value is null.
@@ -1040,25 +1185,29 @@ class ActiveTable
                 
             $DATA[$key] = $value;
         } // end loop
+
+        if($this->allow_pk_write == false)
+        {
+            unset($DATA[$this->primary_key]);
+        }
+
+        // Do not attempt to set the magic PK field to anything...it's 'virtual'-ish.
+        if($this->newSqlGenerator()->getMagicPkName() != null)
+        {
+            unset($DATA[strtolower($this->newSqlGenerator()->getMagicPkName())]);
+        } // end has magic PK
         
         if($this->record_state == 'new')
         {
-            if($this->allow_pk_write == false)
-            {
-                unset($DATA[$this->primary_key]);
-            }
-            
             $resource = $this->db->autoExecute($this->table_name,$DATA,DB_AUTOQUERY_INSERT);
+            $this->debug($this->db->last_query,'sql');
             if(PEAR::isError($resource))
             {
                 throw new SQLError($resource->getDebugInfo(),$resource->userinfo,907);
             }
-            $this->debug($resource->userinfo,'sql');
 
-            // TODO
-            // PEAR::DB offers no way to get back the last_insert_id in a generic way.
-            // As such, this is a MySQL-specific hack. Oh well.
-            $id = $this->db->getOne("SELECT last_insert_id() AS last_insert_id");
+            $id = $this->db->getOne($this->newSqlGenerator()->getLastInsertId($this->table_name));
+            
             if(PEAR::isError($id))
             {
                 throw new SQLError($resource->getDebugInfo(),$resource->userinfo,908);
@@ -1066,24 +1215,30 @@ class ActiveTable
         } // end new
         elseif($this->record_state == 'loaded')
         {
-            $DATA = $this->DATA;
-
-            if($this->allow_pk_write == false)
+            // If we're doing magic...
+            if($this->newSqlGenerator()->getMagicPkName() == $this->primary_key)
             {
-                unset($DATA[$this->primary_key]);
+                $where_fragment = $this->newSqlGenerator()->getMagicUpdateWhere($this->table_name,$this->DATA[$this->primary_key],$this->db);
             }
             
-            $resource = $this->db->autoExecute($this->table_name,$DATA,DB_AUTOQUERY_UPDATE,"{$this->primary_key} = ".$this->db->quoteSmart($this->DATA[$this->primary_key]));
+            // Fall back to something reasonable:
+            if($where_fragment == null)
+            {
+                $where_fragment = "{$this->primary_key} = ".$this->db->quoteSmart($this->DATA[$this->primary_key]);
+            }
+            
+            $resource = $this->db->autoExecute($this->table_name,$DATA,DB_AUTOQUERY_UPDATE,$where_fragment);
+
             if(PEAR::isError($resource))
             {
                 throw new SQLError($resource->getDebugInfo(),$resource->userinfo,909);
             }
-            $this->debug($resource->userinfo,'sql');
+            $this->debug($this->db->last_query,'sql');
 
             $id = $this->DATA[$this->primary_key];
 
             // Save back to the writable lookup tables.
-            foreach($this->LOOKUPS as $LOOKUP )
+            foreach($this->LOOKUPS as $LOOKUP)
             {
                 if($LOOKUP['write'] == true)
                 {
@@ -1098,11 +1253,26 @@ class ActiveTable
 
         // Refresh from the DB.
         $this->load($id);
+
+        $total = round((microtime(true) - $start),4);
+        $this->debug("#save() executed in '$total' seconds.",'method_time');
     } // end save
 
     /* ====================================================================================== */
     /* =============== Internal methods such as helpers, debugging stuff, etc. ============== */
     /* ====================================================================================== */
+
+    protected function execute($handle,$args=array())
+    {
+        $start = microtime(true);
+        
+        $result = $this->db->execute($handle,$args);
+        
+        $total = round((microtime(true) - $start),4);
+        $this->debug("SQL command executed in '$total' seconds.",'sql_time');
+
+        return $result;
+    } // end execute
 
     /** 
      * Write a debug message to the debugging system.
@@ -1114,10 +1284,32 @@ class ActiveTable
      **/
     protected function debug($message,$type='info')
     {
-        if($this->debug == true)
+        if($this->debug == true && $this->logfile_path != null)
         {
-            print $message;
-        }
+            $log = Log::singleton('file',$this->logfile_path,get_class($this),array('timeFormat' => '%Y-%m-%d %H:%M:%S'));
+            
+            switch(strtolower($type))
+            {
+                case 'sql':
+                {
+                    $log->log($message,PEAR_LOG_DEBUG);
+
+                    break;
+                } // end SQL
+                
+                default:
+                {
+                    $log->log($message,PEAR_LOG_INFO);
+                    
+                    break;
+                } // end default
+            } // end switch
+        } // end debug to logfile
+        elseif($debug == true)
+        {
+            // Fallback to something else...
+            print_r($message);
+        } // end catchall
         
         return true;
     } // end debug
@@ -1125,16 +1317,32 @@ class ActiveTable
     /* ====================================================================================== */
     /* ================== Informational doodads for inspecting the objects. ================= */
     /* ====================================================================================== */
+
+    /**
+     * Get the primary table name.
+     * 
+     * @return string 
+     */
     public function tableName()
     {
         return $this->table_name;
     } // end tableName
 
+    /**
+     * Get the primary table's key. 
+     * 
+     * @return string
+     */
     public function primaryKey()
     {
         return $this->primary_key;
     } // end primaryKey
 
+    /**
+     * database 
+     * 
+     * @return void
+     */
     public function database()
     {
         return $this->database;
@@ -1143,6 +1351,41 @@ class ActiveTable
     /* ====================================================================================== */
     /* ===== Implementation details. These are irrelevant. Do not read below this line. ===== */
     /* ====================================================================================== */
+
+    /**
+     * Setup method for loading data into an instance.
+     *
+     * Do not call this directly. Ever. I will break your goddamn fingers
+     * if I ever catch you calling this. It should not be public, but it has
+     * to be for findBy to be efficient (without something like this,
+     * it would have to call #load() and run another query for every result,
+     * which is slow).
+     *
+     * I'm serious. If you call this, I will appear out of thin air with a 
+     * small hammer and turn your knuckles to a fine pulp. Don't make me do it.
+     * 
+     * @internal
+     * @access private
+     * @param array $PRIMARY_DATA 
+     * @param array $LOOKUP_DATA 
+     * @param array $VIRTUAL_DATA 
+     * @return bool True
+     */
+    public function setUp($PRIMARY_DATA,$LOOKUP_DATA,$VIRTUAL_DATA)
+    {
+        $this->DATA = $PRIMARY_DATA;
+        $this->LOOKUPS_DATA = $LOOKUP_DATA;
+        $this->VIRTUAL_DATA = $VIRTUAL_DATA;
+
+        $this->record_state = 'loaded';
+
+        return true;
+    } // end setUp
+
+    private function newSqlGenerator()
+    {
+        return new $this->sql_generator();
+    } // end newSqlGenerator
 
     /**
      * Grab a list of fields in the table.
@@ -1161,15 +1404,29 @@ class ActiveTable
         {
             $database = $this->database;
         }
-        
-        $sql = $this->sql_generator->getDescribeTable($table,$database);
-        $resource = $this->db->query($sql);
+       
+        $sql_generator = $this->newSqlGenerator(); 
+        $sql = $sql_generator->getDescribeTable($table,$database);
+
+        $handle = $this->db->prepare($sql);
+        $resource = $this->execute($handle);
+        $this->debug($sql,'sql');
+        $this->db->freePrepared($handle);
+
         if(PEAR::isError($resource))
         {
             throw new SQLError($resource->getDebugInfo(),$resource->userinfo,905);
         }
         
         $RESULT = array();
+        
+        // If this is the primary table and the DB supports magic PKs, include it in the describe.
+        // Should be in position zero (cx_0).
+        if($sql_generator->getMagicPkName() != null && $table == $this->table_name)
+        {
+            $RESULT[strtolower($sql_generator->getMagicPkName())] = null;
+        } // end add rowid
+        
         while($resource->fetchInto($ROW))
         {
             // Normalize into all lower case (I'm lookin at you, Oracle...)
@@ -1202,17 +1459,15 @@ class ActiveTable
         * INNER JOIN $local_table ON $local_table.$local_key = $foreign_table.$foreign_key
         */
 
-        $this->sql_generator->reset();
-        $this->sql_generator->addKeys($RELATED['foreign_table'],array($RELATED['foreign_primary_key']));
-        $this->sql_generator->addFrom($RELATED['foreign_table'],$RELATED['foreign_database']);
-        $this->sql_generator->addJoinClause($RELATED['foreign_table'],$RELATED['foreign_key'],$RELATED['local_table'],$RELATED['local_table'],$RELATED['local_key'],'inner',$RELATED['foreign_database']);
-        $this->sql_generator->addWhere($RELATED['local_table'],$RELATED['local_key']);
-        $sql = $this->sql_generator->getQuery('select');
-        $this->sql_generator->reset();
+        $sql_generator = $this->newSqlGenerator();
+        $sql_generator->addKeys($RELATED['foreign_table'],array($RELATED['foreign_primary_key']));
+        $sql_generator->addFrom($RELATED['foreign_table'],$RELATED['foreign_database']);
+        $sql_generator->addJoinClause($RELATED['foreign_table'],$RELATED['foreign_key'],$RELATED['local_table'],$RELATED['local_table'],$RELATED['local_key'],'inner',$RELATED['foreign_database']);
+        $sql_generator->addWhere($RELATED['local_table'],$RELATED['local_key']);
+        $sql = $sql_generator->getQuery('select');
 
-        $this->debug($sql,'sql');
         $resource = $this->db->query($sql,array($this->get($RELATED['local_key'],$RELATED['local_table'])));
-        
+        $this->debug($this->db->last_query,'sql');
         if(PEAR::isError($resource))
         {
             throw new SQLError($resource->getDebugInfo(),$resource->userinfo,100);
@@ -1255,14 +1510,23 @@ class ActiveTable
             throw new ArgumentError("Record ID array for $record_set_name was not created. Please report this error.",25);
         }
 
-        foreach($IDS as $id)
+        // No IDs to look for - don't even bother querying the DB.
+        if(sizeof($IDS) == 0)
+        {
+            $this->RELATED_OBJECTS[$record_set_name] = array();
+        }
+        else
         {
             eval('$tmp = new '.$SET['class'].'($this->db);');
-            $tmp->load($id);
+            $this->RELATED_OBJECTS[$record_set_name] = $tmp->findBy(array(
+                array(
+                    'table' => $tmp->tableName(),
+                    'column' => $tmp->primaryKey(),
+                    'value' => $IDS,
+                ),
+            ));
+        }
 
-            $this->RELATED_OBJECTS[$record_set_name][] = $tmp;
-        } // end ID load loop
-        
         return true;
     } // end load_recordset
 
@@ -1279,30 +1543,38 @@ class ActiveTable
         return $simple_word;
     } // end convert_camel_case
     
-    private function make_join($LOOKUPS)
+    /**
+     * make_join 
+     * 
+     * @param array $LOOKUPS 
+     * @param mixed $sql_generator 
+     * @return array
+     */
+    private function make_join($LOOKUPS,$sql_generator)
     {
         if(is_array($LOOKUPS) == true)
         {
             $FILTER_VALUES = array();
             foreach($LOOKUPS as $LOOKUP)
             {
-                $this->sql_generator->addJoinClause($LOOKUP['local_table'],$LOOKUP['local_key'],$LOOKUP['foreign_table'],$LOOKUP['foreign_table_alias'],$LOOKUP['foreign_key'],$LOOKUP['join_type'],$LOOKUP['database']);
+                $sql_generator->addJoinClause($LOOKUP['local_table'],$LOOKUP['local_key'],$LOOKUP['foreign_table'],$LOOKUP['foreign_table_alias'],$LOOKUP['foreign_key'],$LOOKUP['join_type'],$LOOKUP['database']);
 
                 if(array_key_exists('filter',$LOOKUP) == true)
                 {
                     foreach($LOOKUP['filter'] as $column => $value)
                     {
-                        $foo = $this->make_wheres($column,$value);
+                        $foo = $this->make_wheres($column,$value,$sql_generator);
+                        $sql_generator = $foo['sql_generator'];
 
-                        if($foo !== null)
+                        if($foo['search_values'] !== null)
                         {
-                            if(is_array($foo) == true)
+                            if(is_array($foo['search_values']) == true)
                             {
-                                $FILTER_VALUES = array_merge($FILTER_VALUES,$foo);
+                                $FILTER_VALUES = array_merge($FILTER_VALUES,$foo['search_values']);
                             }
                             else
                             {
-                                $FILTER_VALUES[] = $foo; 
+                                $FILTER_VALUES[] = $foo['search_values']; 
                             }
                         }
                     } // end filter loop
@@ -1310,10 +1582,21 @@ class ActiveTable
             }
         } // end is array == true
 
-        return $FILTER_VALUES;
+        return array(
+            'sql_generator' => $sql_generator,
+            'search_values' => $FILTER_VALUES,
+        );
     } // end make_join
 
-    private function make_wheres($column,$value)
+    /**
+     * make_wheres 
+     * 
+     * @param string $column 
+     * @param string  $value 
+     * @param object $sql_generator 
+     * @return void
+     */
+    private function make_wheres($column,$value,$sql_generator)
     {
         // You can pass either an array (if you want othertable.$column,column = value) or 'column' => 'value'.
         if(is_array($value) == true)
@@ -1322,6 +1605,15 @@ class ActiveTable
             if(array_key_exists('table',$value) == false)
             {
                 $value['table'] = $this->table_name;
+            }
+
+            if(array_key_exists('like',$value) == false)
+            {
+                $value['like'] = false;
+            }
+            elseif(in_array($value['like'],array(true,false),true) == false)
+            {
+                throw new ArgumentError('Like may only be true, false, or omitted.',959);
             }
 
             if(array_key_exists('column',$value) == false || array_key_exists('value',$value) == false)
@@ -1338,6 +1630,15 @@ class ActiveTable
             {
                 throw new ArgumentError('Invalid search type given.',955);
             }
+            elseif($value['like'] == true && in_array($value['search_type'],array('<>','=')) == false)
+            {
+                throw new ArgumentError('Valid search_types when like = true are = and <>.',560);
+            }
+
+            if($value['value'] === null && in_array($value['search_type'],array('<>','=')) == false)
+            {
+                throw new ArgumentError('Invalid search type given for IS. Valid values are = and <>.',957);
+            } // end check is not
 
             if(is_array($value['value']) == true)
             {
@@ -1355,56 +1656,197 @@ class ActiveTable
                     throw new ArgumentError('Invalid search type given for in. Valid values are = and <>.',956);
                 }
                 
-                $this->sql_generator->addWhere($value['table'],$value['column'],$in_type,sizeof($value['value']));
+                $sql_generator->addWhere($value['table'],$value['column'],$in_type,sizeof($value['value']));
 
                 $search_value = array();
                 foreach($value['value'] as $in_val)
                 {
                     $search_value[] = $in_val;
-                }
+                } // end loop
             } // end in
             else
             {
-                // The === ensures 0 won't be null.
-                if($value['value'] === null)
+                $type = '';
+                if($value['like'] === true)
                 {
-                    $is_type = '';
+                    // Like + search_type is already validated.
                     if($value['search_type'] == '=')
                     {
-                        $is_type = 'is';
+                        $type = 'like';
                     }
                     elseif($value['search_type'] == '<>')
                     {
-                        $is_type = 'is_not';
+                        $type = 'not_like';
                     }
-                    else
+                } // end like
+                elseif($value['value'] === null) // The === ensures 0 won't be null.
+                {
+                    // Is + search_type is already validated.
+                    if($value['search_type'] == '=')
                     {
-                        throw new ArgumentError('Invalid search type given for IS. Valid values are = and <>.',957);
+                        $type = 'is';
+                    }
+                    elseif($value['search_type'] == '<>')
+                    {
+                        $type = 'is_not';
                     }
                 } // end value is null
                 
-                if($is_type == null)
+                if($type == null)
                 {
-                    $type = $value['search_type'];
+                    $search_type = $value['search_type'];
                 }
                 else
                 {
-                    $type = $is_type;
+                    $search_type = $type;
                 }
                 
-                $this->sql_generator->addWhere($value['table'],$value['column'],$type);
-                $search_value = $value['value'];
+                $sql_generator->addWhere($value['table'],$value['column'],$search_type);
+
+                // Is/is not NULLs should not have anything appended to
+                // the search value list - they are not added as ? placeholders,
+                // and a DB Mismatch will occur.
+                if(in_array($search_type,array('is','is_not')) == false)
+                {
+                    $search_value = $value['value'];
+                }
             } // end =
         } // end is_array
         else
         {
-            $this->sql_generator->addWhere($this->table_name,$column);
-            $search_value = $value;
+            $sql_generator->addWhere($this->table_name,$column);
+
+            if($value === null)
+            {
+                $search_value = '0';
+            }
+            else
+            {
+                $search_value = $value;
+            }
         } // end string
 
-        return $search_value;
+        return array(
+            'sql_generator' => $sql_generator,
+            'search_values' => $search_value,
+        );
     } // end make_wheres
 
+    /**
+     * Add columns to a SQL query in the appropriate manner.
+     * 
+     * Column names follow tablename__column_name to avoid collisions. 
+     *                              ^ Note that there are TWO underscores.
+     * However, in the SQL, they follow x_y - these aliases are used because
+     * certain RDBMS have limits on the length of column aliases - but x_y
+     * resolves to tablename__column_name.
+     *
+     * 1. Build column names for the base table & the base SQL statement.
+     * 2. If there are any lookups, build their key names and JOIN clause.
+     * 
+     * @param mixed $sql_generator 
+     * @return void
+     */
+    private function make_columns($sql_generator)
+    {
+        $keys = array_keys($this->DATA);
+        $fkeys = array();
+
+        $sql_generator = $this->newSqlGenerator();
+        $sql_generator->addKeys($this->table_name,$keys);
+        
+        // There are lookup tables - DO IT!
+        if(sizeof($this->LOOKUPS) > 0)
+        {
+            foreach($this->LOOKUPS as $table_index_number => $LOOKUP)
+            {
+                $fkeys[$table_index_number] = array_keys($this->load_fields($LOOKUP['foreign_table']));
+                $sql_generator->addKeys($LOOKUP['foreign_table_alias'],$fkeys[$table_index_number],$table_index_number);
+            } // end loopup loop
+        } // end lookups > 0
+        
+        if(sizeof($this->VIRTUAL) > 0)
+        {
+            // This is used below - but only do it once and only if there's virtual attributes
+            // to consider.
+            $virt_map = array_keys($this->VIRTUAL);
+            
+            $i = 0;
+            foreach($this->VIRTUAL as $virtual_key => $function_fragment)
+            {
+                $sql_generator->addVirtualKey($function_fragment,$i);
+
+                $i++;
+            } // end virtual loop
+        } // end virtual > 0
+        
+        return array(
+            'sql_generator' => $sql_generator,
+            'lookup_mapping' => $fkeys,
+            'virtual_mapping' => $virt_map,
+        );
+    } // end make_column 
+
+    /**
+     * parse_columns 
+     * 
+     * @param mixed $DATA 
+     * @param mixed $LOOKUP_MAP 
+     * @param mixed $VIRTUAL_MAP 
+     * @return void
+     */
+    private function parse_columns($DATA,$LOOKUP_MAP,$VIRTUAL_MAP)
+    {
+        $PARSED = array(
+            'primary_table' => array(),
+            'lookup_tables' => array(),
+            'virtual_fields' => array(),
+        );
+
+        foreach($DATA as $key => $value)
+        {
+            $key = strtolower($key);
+            $key = substr($key,1); // Strip off the leading 'c' - used to prevent oracle from crying.
+            
+            $table_id = substr($key,0,strpos($key,'_'));
+            $column_id = substr($key,strpos($key,'_')+1);
+
+            // Translate this shit back in to something human-readable.
+            // Thank Oracle's 30-character limit on aliases for this x_0
+            // crap.
+            if($table_id == 'x') // X is for primary.
+            {
+                $table = $this->table_name;
+
+                $column = array_keys($this->DATA);
+                $column = $column[$column_id];
+            }
+            elseif($table_id == 'virt')
+            {
+                $table = 'VIRT';
+            }
+            else
+            {
+                $table = $this->LOOKUPS[$table_id]['foreign_table_alias'];
+                $column = $LOOKUP_MAP[$table_id][$column_id];
+            } // end table name resolver
+           
+            if($table == $this->table_name)
+            {
+                $PARSED['primary_table'][$column] = $value;
+            }
+            elseif($table == 'VIRT')
+            {
+                $PARSED['virtual_fields'][$VIRTUAL_MAP[$column_id]] = $value;
+            }
+            else
+            {
+                $PARSED['lookup_tables'][$table][$column] = $value;
+            }
+        } // end row loop       
+
+        return $PARSED;
+    } // end parse_columns
 } // end ActiveTable
 
 

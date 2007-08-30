@@ -12,22 +12,22 @@ ActivePHP (otherwise known as ActiveTable) is a very simple implementation of th
 Using ActiveTable, you can define a class that will automatically define setters/getters for columns and 
 provide you with the basic CRUD methods needed in any application.
 
-ActivePHP is written for MySQL, although it may work (to a limited extent) with other database for read-only
-operations. It uses the PEAR::DB abstraction layer for doing most of its work, so any limitations on what 
-database this library can interact with can be resolved easily.
+ActivePHP supports MySQL and Oracle (8i and 9i have been tested). It uses the PEAR::DB abstraction layer for doing most of its work, so any limitations on what 
+database this library can interact with can be resolved easily; another SQL generation driver for your RDBMS of choice is all that is needed.
 
 == Requirements ==
 ActiveTable requires the following:
 
 * PHP 5 (5.1 preferred)
     * PEAR and the PEAR::DB and PEAR::Log packages.
-* MySQL, Oracle (see note below regarding Oracle)
-* Table(s) with an auto-incrememting primary key.
+* MySQL (4 or 5), Oracle (8i, 9i, or 10g)
+    * MySQL: Table(s) with an auto-incrememting primary key.
+    * Oracle uses the 'rowid' present in every table.
 
 == Use ==
 Please see the example file in docs/ for example uses.
 
 == Notes on Oracle ==
-ActiveTable uses the Oracle rowid internally. Unless you have an auto-incrementing integer
-in your Oracle table, it is strongly advised that you set the primary_key to rowid for any Oracle
-tables.
+ActiveTable uses the Oracle rowid internally. Unless you have an auto-
+incrementing integer in your Oracle table, it is strongly advised that you 
+set the $primary_key to 'rowid' for any Oracle tables.

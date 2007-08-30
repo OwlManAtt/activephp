@@ -164,6 +164,8 @@ class ActiveTable
      *       'foreign_key' => 'id_z',
      *       'foreign_primary_key' => 'table_from_other_class_id', // Defaults to the PK.
      *       'foreign_database' => 'db', // optional
+     *       'one' => false, // Defaults to false, set to true to act like
+     *                       // #findOneBy().
      *   ),
      *   'users' => array( // Minimalistic example.
      *       'class' => 'User',
@@ -364,6 +366,7 @@ class ActiveTable
         *    'foreign_table' => 'table_from_other_class',
         *    'foreign_key' => 'id_z',
         *    'foreign_primary_key' => 'id_z',
+        *    'one' => false, // Behave like #findOneBy().
         * ),
         */
 
@@ -379,8 +382,36 @@ class ActiveTable
                 throw new ArgumentError("The class for record set $record_set_name is not a defined class.",916);
             }
 
-            // For inspecting.
-            eval('$tmp = new '.$SET_DEFINITION['class'].'($this->db'.$arg_fragment.');');
+            if(array_key_exists('one',$SET_DEFINITION) == false)
+            {
+                $this->RELATED[$record_set_name]['one'] = false; 
+            } // end one = false
+
+            // For inspecting. Only do so if absolutely required, though.
+            // In cases where you want to reciprocate RELATEDs, DEFINE THE
+            // FT/FK/FPK IN ONE to avoid INFINITE LOOPS.
+            if(array_key_exists('foreign_table',$SET_DEFINITION) == false ||
+               array_key_exists('foreign_key',$SET_DEFINITION) == false ||
+               array_key_exists('foreign_primary_key',$SET_DEFINITION) == false
+            )
+            {
+                eval('$tmp = new '.$SET_DEFINITION['class'].'($this->db'.$arg_fragment.');');
+
+                if(array_key_exists('foreign_table',$SET_DEFINITION) == false)
+                {
+                    $this->RELATED[$record_set_name]['foreign_table'] = $tmp->tableName();
+                }
+
+                if(array_key_exists('foreign_key',$SET_DEFINITION) == false)
+                {
+                    throw new ArgumentError("Foreign key not definedin record set $record_set_name.",914);
+                }
+                
+                if(array_key_exists('foreign_primary_key',$SET_DEFINITION) == false)
+                {
+                    $this->RELATED[$record_set_name]['foreign_primary_key'] = $tmp->primaryKey();
+                }
+            } // end need to inspect
 
             if(array_key_exists('local_table',$SET_DEFINITION) == false)
             {
@@ -391,27 +422,7 @@ class ActiveTable
             {
                 throw new ArgumentError("Local key not definedin record set $record_set_name.",912);
             }
-
-            if(array_key_exists('foreign_table',$SET_DEFINITION) == false)
-            {
-                $this->RELATED[$record_set_name]['foreign_table'] = $tmp->tableName();
-            }
             
-            if(array_key_exists('foreign_key',$SET_DEFINITION) == false)
-            {
-                throw new ArgumentError("Foreign key not definedin record set $record_set_name.",914);
-            }
-            
-            if(array_key_exists('foreign_primary_key',$SET_DEFINITION) == false)
-            {
-                $this->RELATED[$record_set_name]['foreign_primary_key'] = $tmp->primaryKey();
-            }
-
-            if(array_key_exists('foreign_database',$SET_DEFINITION) == false)
-            {
-                $this->RELATED[$record_set_name]['foreign_database'] = $tmp->database();
-            }
-
             // Intialize the ID list.
             $this->RELATED_IDS[$record_set_name] = array();
         } // end related set validation
@@ -1517,8 +1528,14 @@ class ActiveTable
         }
         else
         {
+            $method = 'findBy';
+            if($SET['one'] == true)
+            {
+                $method = 'findOneBy';
+            }
+            
             eval('$tmp = new '.$SET['class'].'($this->db);');
-            $this->RELATED_OBJECTS[$record_set_name] = $tmp->findBy(array(
+            $this->RELATED_OBJECTS[$record_set_name] = $tmp->$method(array(
                 array(
                     'table' => $tmp->tableName(),
                     'column' => $tmp->primaryKey(),

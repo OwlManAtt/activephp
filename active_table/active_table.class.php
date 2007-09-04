@@ -549,7 +549,7 @@ class ActiveTable
             $total = round((microtime(true) - $start),4);
             $this->debug("#__call($method) executed in '$total' seconds.",'method_time');       
           
-            return $this->grab($set_name); 
+            return $this->grab($set_name,$parameters[0],$parameters[1],$parameters[2]); 
         } // end load record sets
         elseif(preg_match('/^findOneBy([A-Z][A-Za-z0-9_]*)$/',$method,$FOUND) == true)
         {
@@ -587,19 +587,27 @@ class ActiveTable
     /**
      * Grab RELATED record set.
      *
-     * @param string
+     * @param string $record_set A record set name.
+     * @param string $order_by A raw ORDER BY clause.
+     * @param string $limit A raw LIMIT clause.
+     * @param bool $reset Throw away any cached results from previous grabs.
      * @return array
      **/
-    public function grab($record_set)
+    public function grab($record_set,$order_by=null,$limit=null,$reset=false)
     {
         $start = microtime(true);
+
+        if(array_key_exists($record_set,$this->RELATED) == false)
+        {
+            throw new ArgumentError('No such recordset is defined.');
+        } // end recordset does not exist
         
         // The array in RELATED_OBJECTS is not created for the set until loaded.
         // This keeps a difference between non-loaded and loaded-but-zero-rows-returned. 
-        if(array_key_exists($record_set,$this->RELATED_OBJECTS) == false)
+        if(array_key_exists($record_set,$this->RELATED_OBJECTS) == false || $reset == true)
         {
-            $this->RELATED_IDS[$record_set] = $this->load_recordset_id_list($this->RELATED[$record_set]);
-            $this->load_recordset($record_set);
+            $this->RELATED_IDS[$record_set] = $this->load_recordset_id_list($this->RELATED[$record_set],"$order_by $limit");
+            $this->load_recordset($record_set,$order_by);
         } // end record set not loaded
 
         $total = round((microtime(true) - $start),4);
@@ -1401,7 +1409,7 @@ class ActiveTable
     /**
      * Grab a list of fields in the table.
      *
-     * @var The table name. This defaults to the current table.
+     * @param string The table name. This defaults to the current table.
      * @internal
      */
     private function load_fields($table=null,$database=null)
@@ -1452,7 +1460,14 @@ class ActiveTable
         return $RESULT;
     } // end load_fields
 
-    private function load_recordset_id_list($RELATED)
+    /**
+     * load_recordset_id_list 
+     * 
+     * @param array $RELATED Record set specification.
+     * @param string $order_by A raw ORDER BY clause.
+     * @return void
+     **/
+    private function load_recordset_id_list($RELATED,$order_by=null)
     {
         /*
         * 'record_set' => array( // Verbose example.
@@ -1475,6 +1490,12 @@ class ActiveTable
         $sql_generator->addFrom($RELATED['foreign_table'],$RELATED['foreign_database']);
         $sql_generator->addJoinClause($RELATED['foreign_table'],$RELATED['foreign_key'],$RELATED['local_table'],$RELATED['local_table'],$RELATED['local_key'],'inner',$RELATED['foreign_database']);
         $sql_generator->addWhere($RELATED['local_table'],$RELATED['local_key']);
+        
+        if($order_by != null)
+        {
+            $sql_generator->addOrder($order_by);
+        }
+        
         $sql = $sql_generator->getQuery('select');
 
         $resource = $this->db->query($sql,array($this->get($RELATED['local_key'],$RELATED['local_table'])));
@@ -1502,7 +1523,7 @@ class ActiveTable
      *                       is not actually defined.
      * @return void
      **/
-    private function load_recordset($record_set_name)
+    private function load_recordset($record_set_name,$order_by=null)
     {
         if(array_key_exists($record_set_name,$this->RELATED) == false)
         {
@@ -1533,7 +1554,7 @@ class ActiveTable
             {
                 $method = 'findOneBy';
             }
-            
+
             eval('$tmp = new '.$SET['class'].'($this->db);');
             $this->RELATED_OBJECTS[$record_set_name] = $tmp->$method(array(
                 array(
@@ -1541,7 +1562,7 @@ class ActiveTable
                     'column' => $tmp->primaryKey(),
                     'value' => $IDS,
                 ),
-            ));
+            ),$order_by);
         }
 
         return true;

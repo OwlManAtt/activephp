@@ -881,6 +881,7 @@ class ActiveTable
      * @param array Things to search on. Everything is an AND and nesting
      *              is not supported.
      * @param string ORDER BY clause.
+     * @param boolean Return count instead of results, true or false.
      * @throws SQLError If an invalid SQL statement is generated (usually due to
      *                  an invalid column name getting mogged in somewhere),
      *                  this exception will be thrown.
@@ -888,7 +889,7 @@ class ActiveTable
      *                       argument error will be thrown.
      * @return array An array of __CLASS__ instances representing the dataset.
      */
-    public function findBy($args,$order_by='')
+    public function findBy($args,$order_by='',$count=false)
     {
         $start = microtime(true);
         
@@ -902,9 +903,17 @@ class ActiveTable
             
         // Clear things out.
         $sql_generator = $this->newSqlGenerator();
-
-        $columns = $this->make_columns($sql_generator);
-        $sql_generator = $columns['sql_generator'];
+        
+        // If count is not enabled, add the columns. Otherwise, add a count. 
+        if($count == false)
+        {
+            $columns = $this->make_columns($sql_generator);
+            $sql_generator = $columns['sql_generator'];
+        } // end get data
+        else
+        {
+            $sql_generator->addVirtualKey('count(*)',0);
+        } // end count(*)
         
         $sql_generator->addFrom($this->table_name,$this->database);
         $foo = $this->make_join($this->LOOKUPS,$sql_generator);
@@ -982,9 +991,16 @@ class ActiveTable
                 
             } // end additional constructor arg handler
             
-            eval('$tmp = new '.get_class($this).'($this->db'.$arg_fragment.');');
-            $tmp->setUp($RESULT_DATA['primary_table'],$RESULT_DATA['lookup_tables'],$RESULT_DATA['virtual_fields']);
-            $SET[] = $tmp;
+            if($count == true)
+            {
+                return array_shift($RESULT_DATA['virtual_fields']);
+            }
+            else
+            {
+                eval('$tmp = new '.get_class($this).'($this->db'.$arg_fragment.');');
+                $tmp->setUp($RESULT_DATA['primary_table'],$RESULT_DATA['lookup_tables'],$RESULT_DATA['virtual_fields']);
+                $SET[] = $tmp;
+            } // end not count
         } // end loop
        
         $total = round((microtime(true) - $start),4);

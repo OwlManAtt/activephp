@@ -5,7 +5,7 @@
  * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
- * @version    2.2.0
+ * @version    2.2.7
  **/
 
 /**
@@ -14,6 +14,13 @@
 require_once('SqlGenerators/interface.inc.php');
 require_once('SqlGenerators/mysql.class.php');
 require_once('SqlGenerators/oci.class.php');
+
+/**
+ * Table definition cacher libraries. 
+ **/
+require_once('Cachers/interface.inc.php');
+require_once('Cachers/globals.class.php');
+require_once('Cachers/apc.class.php');
 
 /**
  * The base class that implements all of the magic for your child classes.
@@ -56,9 +63,18 @@ class ActiveTable
      * The DSN for the PEAR::DB connector is examined and the driver is spawned.
      *
      * @internal
-     * @var string 
+     * @var mixed 
      */
     protected $sql_generator;
+
+    /**
+     * A variable to hold an ActiveTable_Cache_* class to be used for holding
+     * on to table definitions.
+     * 
+     * @internal
+     * @var mixed 
+     **/
+    protected $cacher;
 
     /**
      * The name of the database for your table. Leave this blank to default it to
@@ -314,6 +330,18 @@ class ActiveTable
                 break;
             } // end default
         } // end db connector type switch 
+
+        // Pick a Cacher to load.
+        if(ini_get('apc.enabled') == 1)
+        {
+            // We have APC! HELL YES!
+            $this->debug("APC detected.",'cache');
+            $this->cacher = new ActiveTable_Cache_APC();
+        } 
+        else
+        {
+            $this->cacher = new ActiveTable_Cache_Globals();
+        }
         
         if($this->table_name == null)
         {
@@ -969,6 +997,18 @@ class ActiveTable
             throw new SQLError($resource->getDebugInfo(),$resource->userinfo,909);
         }
 
+        // Determine if #load() has been defined in the child. If it has,
+        // it's probably safe to assume that we should call it. If #load()
+        // has been left as-is, then I know that there is no need to call it -
+        // #findBy() calls #setUp() and the instances will be completely OK.
+        $call_load = false;
+        $reflect = new ReflectionClass(get_class($this));
+        
+        if(strtolower($reflect->getMethod('load')->getDeclaringClass()->getName()) != 'activetable')
+        {
+            $call_load = true;
+        }
+
         $SET = array();
         while($resource->fetchInto($row))
         {
@@ -999,6 +1039,12 @@ class ActiveTable
             {
                 eval('$tmp = new '.get_class($this).'($this->db'.$arg_fragment.');');
                 $tmp->setUp($RESULT_DATA['primary_table'],$RESULT_DATA['lookup_tables'],$RESULT_DATA['virtual_fields']);
+
+                if($call_load == true)
+                {
+                    $tmp->load($RESULT_DATA['primary_table'][$this->primary_key]);
+                } // end call load
+                
                 $SET[] = $tmp;
             } // end not count
         } // end loop
@@ -1439,39 +1485,51 @@ class ActiveTable
         {
             $database = $this->database;
         }
-       
-        $sql_generator = $this->newSqlGenerator(); 
-        $sql = $sql_generator->getDescribeTable($table,$database);
 
-        $handle = $this->db->prepare($sql);
-        $resource = $this->execute($handle);
-        $this->debug($sql,'sql');
-        $this->db->freePrepared($handle);
+        $CACHE = $this->cacher->loadTable($table,$database);
 
-        if(PEAR::isError($resource))
+        if(is_array($CACHE) == true)
         {
-            throw new SQLError($resource->getDebugInfo(),$resource->userinfo,905);
+            $this->debug("Cached structure found for $table.",'cache');
+            $RESULT = $CACHE;
         }
-        
-        $RESULT = array();
-        
-        // If this is the primary table and the DB supports magic PKs, include it in the describe.
-        // Should be in position zero (cx_0).
-        if($sql_generator->getMagicPkName() != null && $table == $this->table_name)
+        else
         {
-            $RESULT[strtolower($sql_generator->getMagicPkName())] = null;
-        } // end add rowid
-        
-        while($resource->fetchInto($ROW))
-        {
-            // Normalize into all lower case (I'm lookin at you, Oracle...)
-            foreach($ROW as $key => $value)
+            $this->debug("Cached structure not found for $table; describing...",'cache');
+
+            $sql_generator = $this->newSqlGenerator(); 
+            $sql = $sql_generator->getDescribeTable($table,$database);
+
+            $resource = $this->db->query($sql);
+            $this->debug($sql,'sql');
+
+            if(PEAR::isError($resource))
             {
-                $ROW[strtolower($key)] = $value;
+                throw new SQLError($resource->getDebugInfo(),$resource->userinfo,905);
             }
             
-            $RESULT[strtolower($ROW['field'])] = null;
-        } // end loop
+            $RESULT = array();
+            
+            // If this is the primary table and the DB supports magic PKs, include it in the describe.
+            // Should be in position zero (cx_0).
+            if($sql_generator->getMagicPkName() != null && $table == $this->table_name)
+            {
+                $RESULT[strtolower($sql_generator->getMagicPkName())] = null;
+            } // end add rowid
+            
+            while($resource->fetchInto($ROW))
+            {
+                // Normalize into all lower case (I'm lookin at you, Oracle...)
+                foreach($ROW as $key => $value)
+                {
+                    $ROW[strtolower($key)] = $value;
+                }
+                
+                $RESULT[strtolower($ROW['field'])] = null;
+            } // end loop
+
+            $this->cacher->addTable($table,$RESULT,$database);
+        } // end not cached
 
         return $RESULT;
     } // end load_fields

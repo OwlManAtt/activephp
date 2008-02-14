@@ -5,7 +5,7 @@
  * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
- * @version    2.2.7
+ * @version    2.7.0
  */
 
 /**
@@ -46,7 +46,17 @@ interface ActiveTable_SQL
      * @return void
      */
     public function getMagicUpdateWhere($table,$value,&$db);
-    
+
+    /**
+     * Add the magic PK to the column list.
+     *
+     * This should return null if magic PKs are unused.
+     *
+     * @param string $table_name Name of primary table.
+     * @return void
+     */
+    public function addMagicPkToKeys($table_name);
+     
     /**
      * Return the SQL statement to get the PK for the last row inserted. 
      *
@@ -136,5 +146,27 @@ interface ActiveTable_SQL
     public function addWhere($table,$column,$type='equal',$count=0);
     public function addOrder($sql_fragment);
     public function addLimit($limit);
+    
+    /**
+     * Register function to build a one-off LIMIT statement.
+     *
+     * This will construct an appropriate LIMIT statement for your RDBMS and the
+     * number of args you are searching on (ie, AND/WHERE decision in OCI8).
+     *
+     * This is used for findOneBy() to stay DRY.
+     *
+     * @param integer The number of WHERE clauses.
+     * @param integer The number of rows to retrieve. 
+     **/
+    public function buildOneOffLimit($condition_number,$limit_number);
+
+    /**
+     * Generate a SQL query to return a slice from a larger result set.
+     *
+     * @param integer $start The position to begin the slice at. Start from 1, not 0.
+     * @param integer $end The position to end the slice at.
+     **/
+    public function setSlice($start,$end);
+
 } // end ActiveTable_SQL
 ?>

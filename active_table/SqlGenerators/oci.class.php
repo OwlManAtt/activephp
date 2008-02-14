@@ -5,7 +5,7 @@
  * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
- * @version    2.2.7
+ * @version    2.7.0
  */
 
 /**
@@ -23,6 +23,11 @@ class ActiveTable_SQL_Oracle implements ActiveTable_SQL
     protected $where = array();
     protected $order = '';
     public $magic_pk_name = 'rowid';
+    
+    // If get_slice is true, a slice query will be generated. 
+    private $get_slice = false;
+    private $slice_start = null;
+    private $slice_end = null;
 
     public function __construct()
     {
@@ -33,6 +38,11 @@ class ActiveTable_SQL_Oracle implements ActiveTable_SQL
     {
         return 'rowid';
     } // end getMagicPkName
+
+    public function addMagicPkToKeys($table_name)
+    {
+        $this->columns[] = "ROWIDTOCHAR($table_name.rowid) AS cx_0";
+    } // end addMagicPkToKeys
 
     public function getMagicUpdateWhere($table,$value,&$db)
     {
@@ -77,6 +87,20 @@ class ActiveTable_SQL_Oracle implements ActiveTable_SQL
                     $sql .= $this->order."\n";
                 }
 
+                if($this->get_slice == true)
+                {
+                    $wrapper = "SELECT * FROM (\n";
+                        $wrapper .= "\tSELECT a.*, ROWNUM rnum\n";
+                        $wrapper .= "\tFROM (\n";
+                            $wrapper .= $sql;
+                        $wrapper .= "\t) a\n";
+                        $wrapper .= "\tWHERE ROWNUM <= {$this->slice_end}\n";
+                    $wrapper .= ")\n";
+                    $wrapper .= "WHERE rnum >= {$this->slice_start}\n";
+
+                    $sql = $wrapper;
+                } // end add slice wrapper query
+
                 break;
             } // end select
         } // end switch
@@ -94,9 +118,6 @@ class ActiveTable_SQL_Oracle implements ActiveTable_SQL
         {
             $this->from[] = "$database.$table";
         }
-
-        $this->columns[] = "ROWIDTOCHAR($table.rowid) AS cx_0";
-        
     } // end addFrom
 
     public function addWhere($table,$column,$type='=',$count=0)
@@ -263,6 +284,23 @@ class ActiveTable_SQL_Oracle implements ActiveTable_SQL
     {
         return "SELECT ROWIDTOCHAR(MAX(rowid)) FROM $table";
     } // end getLastInsertId
+
+    public function buildOneOffLimit($condition_number,$limit_number)
+    {
+        if($condition_number == 0)
+        {
+            return "WHERE rownum >= $limit_number\n";
+        }
+        
+        return "AND rownum >= $limit_number\n";
+    } // end buildOneOffLimit
+
+    public function setSlice($start,$end)
+    {
+        $this->get_slice = true;
+        $this->slice_start = $start;
+        $this->slice_end = $end;
+    } // end setSlice
 } // end ActiveTable_Oracle_SQL
 
 ?>

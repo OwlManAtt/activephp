@@ -5,7 +5,7 @@
  * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
- * @version    2.2.7
+ * @version    2.7.0
  */
 
 /**
@@ -40,6 +40,11 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
     {
         return null;
     } // end getMagicUpdateWhere
+
+    public function addMagicPkToKeys($table_name)
+    {
+        return null;
+    } // end addMagicPkToKeys
 
     public function getFormattedDate($datetime)
     {
@@ -267,6 +272,23 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
     {
         return "SELECT last_insert_id() AS last_insert_id";
     } // end getLastInsertId
+
+    public function buildOneOffLimit($condition_number,$limit_number)
+    {
+        return "LIMIT $limit_number\n";
+    } // end buildOneOffLimit
+    
+    public function setSlice($start,$end)
+    {
+        if($this->limit != null)
+        {
+            throw new SQLGenerationError('Limit has been set for this query; cannot return a slice.');
+        }
+        
+        $end++; 
+        $total = $end - $start;
+        $this->limit = "$start,$total";
+    } // end setSlice
 } // end ActiveTable_MySQL_SQL
 
 ?>

@@ -5,7 +5,7 @@
  * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
- * @version    2.2.7
+ * @version    2.2.0
  */
 
 /**
@@ -268,7 +268,7 @@ class CSVIO extends ActiveTable
                     {
                         case 'date':
                         {
-                            $date = $this->sql_generator->getFormattedDate($value);
+                            $date = $this->newSqlGenerator()->getFormattedDate($value);
                             $date = explode(' ',$date);
                             
                             $value = $date[0]; 
@@ -278,7 +278,7 @@ class CSVIO extends ActiveTable
                         
                         case 'datetime':
                         {
-                            $value = $this->sql_generator->getFormattedDate($value);
+                            $value = $this->newSqlGenerator()->getFormattedDate($value);
 
                             break;
                         } // end datetime

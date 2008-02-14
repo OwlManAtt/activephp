@@ -5,7 +5,7 @@
  * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
- * @version    2.2.7
+ * @version    2.7.0
  **/
 
 /**
@@ -563,7 +563,7 @@ class ActiveTable
                 'column' => $property_name,
                 'value' => $value,
             );
-            $ROWS = $this->findBy($params,$ORDER);
+            $ROWS = $this->findBy($params,$ORDER,$parameters[2],$parameters[3],$parameters[4]);
        
             $total = round((microtime(true) - $start),4);
             $this->debug("#__call($method) executed in '$total' seconds.",'method_time');       
@@ -577,7 +577,7 @@ class ActiveTable
             $total = round((microtime(true) - $start),4);
             $this->debug("#__call($method) executed in '$total' seconds.",'method_time');       
           
-            return $this->grab($set_name,$parameters[0],$parameters[1],$parameters[2]); 
+            return $this->grab($set_name,$parameters[0],$parameters[1],$parameters[2],$parameters[3]); 
         } // end load record sets
         elseif(preg_match('/^findOneBy([A-Z][A-Za-z0-9_]*)$/',$method,$FOUND) == true)
         {
@@ -617,11 +617,13 @@ class ActiveTable
      *
      * @param string $record_set A record set name.
      * @param string $order_by A raw ORDER BY clause.
-     * @param string $limit A raw LIMIT clause.
+     * $param boolean $count If true, the number of rows that would be returned is returned.
+     * @param integer $slice_start The beginning of a slice from the related rows.
+     * @param integer $slice_end The end of a slice from the related rows. 
      * @param bool $reset Throw away any cached results from previous grabs.
      * @return array
      **/
-    public function grab($record_set,$order_by=null,$limit=null,$reset=false)
+    public function grab($record_set,$order_by=null,$count=false,$slice_start=null,$slice_end=null,$reset=false)
     {
         $start = microtime(true);
 
@@ -629,19 +631,45 @@ class ActiveTable
         {
             throw new ArgumentError('No such recordset is defined.');
         } // end recordset does not exist
+
+        if(($slice_start === null && $slice_end === null) == false &&
+            ($slice_start !== null && $slice_end !== null) == false
+        )
+        {
+            throw new ArgumentError('Must specify either no slice arguments or both slice arguments.');
+        } // end problem w/ args.
+
+        // Give the slice a unique name, if we want a slice. Otherwise, if someone wanted the full set,
+        // we would have an issue. 
+        $record_set_name = $record_set;
+        if($slice_start !== null && $slice_end !== null)
+        {
+            $record_set_name .= "_{$slice_start},{$slice_end}";
+        }
         
         // The array in RELATED_OBJECTS is not created for the set until loaded.
         // This keeps a difference between non-loaded and loaded-but-zero-rows-returned. 
-        if(array_key_exists($record_set,$this->RELATED_OBJECTS) == false || $reset == true)
+        if(array_key_exists($record_set_name,$this->RELATED_OBJECTS) == false || $reset == true)
         {
-            $this->RELATED_IDS[$record_set] = $this->load_recordset_id_list($this->RELATED[$record_set],"$order_by $limit");
-            $this->load_recordset($record_set,$order_by);
+            $this->RELATED_IDS[$record_set_name] = $this->load_recordset_id_list($this->RELATED[$record_set],$order_by,$slice_start,$slice_end);
+           
+            // TODO
+            // Making this into a count(*) would probably be faster, but this is OK for the time being. 
+            if($count == true)
+            {
+                $total = round((microtime(true) - $start),4);
+                $this->debug("#grab() executed in '$total' seconds.",'method_time');
+
+                return sizeof($this->RELATED_IDS[$record_set_name]);
+            } // end count
+
+            $this->load_recordset($record_set,$record_set_name,$order_by);
         } // end record set not loaded
 
         $total = round((microtime(true) - $start),4);
         $this->debug("#grab() executed in '$total' seconds.",'method_time');
 
-        return $this->RELATED_OBJECTS[$record_set];
+        return $this->RELATED_OBJECTS[$record_set_name];
     } // end grab
 
     /**
@@ -917,7 +945,7 @@ class ActiveTable
      *                       argument error will be thrown.
      * @return array An array of __CLASS__ instances representing the dataset.
      */
-    public function findBy($args,$order_by='',$count=false)
+    public function findBy($args,$order_by='',$count=false,$slice_start=null,$slice_end=null)
     {
         $start = microtime(true);
         
@@ -925,6 +953,33 @@ class ActiveTable
         {
             throw new ArgumentError('Args must be an array.',950);
         }
+
+        if(($slice_start === null && $slice_end === null) == false &&
+            ($slice_start !== null && $slice_end !== null) == false
+        )
+        {
+            throw new ArgumentError('Must specify either no slice arguments or both slice arguments.');
+        } // end problem w/ args.
+
+        /*
+        * Translate into start,# to fetch.
+        *
+        * == MySQL
+        * $total = $end - $start;
+        * $limit = "LIMIT $start,$total";
+        *
+        * == OCIAIDS
+        *   select * from
+        *   (
+        *       select
+        *       a.*, ROWNUM rnum
+        *       from (
+        *         $query
+        *       ) a
+        *       where ROWNUM <= $end
+        *   )
+        *   where rnum  >= $start
+        */
 
         $SEARCH_VALUES = array();
         $AND = array();
@@ -937,6 +992,11 @@ class ActiveTable
         {
             $columns = $this->make_columns($sql_generator);
             $sql_generator = $columns['sql_generator'];
+
+            if($sql_generator->getMagicPkName() != null)
+            {
+                $sql_generator->addMagicPkToKeys($this->table_name);
+            }
         } // end get data
         else
         {
@@ -984,6 +1044,16 @@ class ActiveTable
         {
             $sql_generator->addOrder($order_by);
         }
+
+        if($slice_start !== null && $slice_end !== null)
+        {
+            if($slice_start === 0)
+            {
+                $slice_start = 1;
+            }
+            
+            $sql_generator->setSlice($slice_start,$slice_end);
+        } // end slice
         
         $sql = $sql_generator->getQuery('select');
         $handle = $this->db->prepare($sql);
@@ -1010,6 +1080,7 @@ class ActiveTable
         }
 
         $SET = array();
+        $class_name = get_class($this);
         while($resource->fetchInto($row))
         {
             $RESULT_DATA = $this->parse_columns($row,$columns['lookup_mapping'],$columns['virtual_mapping']);
@@ -1037,7 +1108,7 @@ class ActiveTable
             }
             else
             {
-                eval('$tmp = new '.get_class($this).'($this->db'.$arg_fragment.');');
+                eval('$tmp = new '.$class_name.'($this->db'.$arg_fragment.');');
                 $tmp->setUp($RESULT_DATA['primary_table'],$RESULT_DATA['lookup_tables'],$RESULT_DATA['virtual_fields']);
 
                 if($call_load == true)
@@ -1072,7 +1143,10 @@ class ActiveTable
      */
     public function findOneBy($ARGS,$order_by='')
     {
-        $result = $this->findBy($ARGS,"$order_by LIMIT 1");
+        $sql_generator = $this->newSqlGenerator();
+        $limit = $sql_generator->buildOneOffLimit(sizeof($ARGS),1);
+        
+        $result = $this->findBy($ARGS,"$order_by $limit");
         $result = array_shift($result);
 
         return $result;
@@ -1106,6 +1180,10 @@ class ActiveTable
         $sql_generator = $columns['sql_generator'];
         
         $sql_generator->addFrom($this->table_name,$this->database);
+        if($sql_generator->getMagicPkName() != null)
+        {
+            $sql_generator->addMagicPkToKeys($this->table_name);
+        }
         
         // A filter on a join might make this more than just the PK... 
         $join = $this->make_join($this->LOOKUPS,$sql_generator);
@@ -1278,20 +1356,27 @@ class ActiveTable
             unset($DATA[strtolower($this->newSqlGenerator()->getMagicPkName())]);
         } // end has magic PK
         
+        // Oracle users need db.table.
+        $table_name = $this->table_name;
+        if($this->database != '')
+        {
+            $table_name = "{$this->database}.{$this->table_name}";
+        }
+        
         if($this->record_state == 'new')
         {
-            $resource = $this->db->autoExecute($this->table_name,$DATA,DB_AUTOQUERY_INSERT);
+            $resource = $this->db->autoExecute($table_name,$DATA,DB_AUTOQUERY_INSERT);
             $this->debug($this->db->last_query,'sql');
             if(PEAR::isError($resource))
             {
                 throw new SQLError($resource->getDebugInfo(),$resource->userinfo,907);
             }
 
-            $id = $this->db->getOne($this->newSqlGenerator()->getLastInsertId($this->table_name));
+            $id = $this->db->getOne($this->newSqlGenerator()->getLastInsertId($table_name));
             
             if(PEAR::isError($id))
             {
-                throw new SQLError($resource->getDebugInfo(),$resource->userinfo,908);
+                throw new SQLError($id->getDebugInfo(),$id->userinfo,908);
             }
         } // end new
         elseif($this->record_state == 'loaded')
@@ -1308,7 +1393,7 @@ class ActiveTable
                 $where_fragment = "{$this->primary_key} = ".$this->db->quoteSmart($this->DATA[$this->primary_key]);
             }
             
-            $resource = $this->db->autoExecute($this->table_name,$DATA,DB_AUTOQUERY_UPDATE,$where_fragment);
+            $resource = $this->db->autoExecute($table_name,$DATA,DB_AUTOQUERY_UPDATE,$where_fragment);
 
             if(PEAR::isError($resource))
             {
@@ -1541,8 +1626,15 @@ class ActiveTable
      * @param string $order_by A raw ORDER BY clause.
      * @return void
      **/
-    private function load_recordset_id_list($RELATED,$order_by=null)
+    private function load_recordset_id_list($RELATED,$order_by=null,$slice_start=null,$slice_end=null)
     {
+        if(($slice_start === null && $slice_end === null) == false &&
+            ($slice_start !== null && $slice_end !== null) == false
+        )
+        {
+            throw new ArgumentError('Must specify either no slice arguments or both slice arguments.');
+        } // end problem w/ args.
+
         /*
         * 'record_set' => array( // Verbose example.
         *     'class' => 'Tags',
@@ -1568,6 +1660,11 @@ class ActiveTable
         if($order_by != null)
         {
             $sql_generator->addOrder($order_by);
+        }
+
+        if($slice_start !== null && $slice_end !== null)
+        {
+            $sql_generator->setSlice($slice_start,$slice_end);
         }
         
         $sql = $sql_generator->getQuery('select');
@@ -1597,29 +1694,29 @@ class ActiveTable
      *                       is not actually defined.
      * @return void
      **/
-    private function load_recordset($record_set_name,$order_by=null)
+    private function load_recordset($record_set,$storage_name,$order_by=null)
     {
-        if(array_key_exists($record_set_name,$this->RELATED) == false)
+        if(array_key_exists($record_set,$this->RELATED) == false)
         {
-            throw new ArgumentError("Invalid record set '$record_set_name' specified.",915);
+            throw new ArgumentError("Invalid record set '$record_set' specified.",915);
         }
 
         // Alias.
-        $SET = $this->RELATED[$record_set_name];
-        $IDS = $this->RELATED_IDS[$record_set_name];
-        $this->RELATED_OBJECTS[$record_set_name] = array();
+        $SET = $this->RELATED[$record_set];
+        $IDS = $this->RELATED_IDS[$storage_name];
+        $this->RELATED_OBJECTS[$storage_name] = array();
 
         // This should never happen...the first exception would be thrown instead...but just in case something
         // happens to the instance's state...
         if(is_array($IDS) == false)
         {
-            throw new ArgumentError("Record ID array for $record_set_name was not created. Please report this error.",25);
+            throw new ArgumentError("Record ID array for $record_set was not created. Please report this error.",25);
         }
 
         // No IDs to look for - don't even bother querying the DB.
         if(sizeof($IDS) == 0)
         {
-            $this->RELATED_OBJECTS[$record_set_name] = array();
+            $this->RELATED_OBJECTS[$storage_name] = array();
         }
         else
         {
@@ -1630,7 +1727,7 @@ class ActiveTable
             }
 
             eval('$tmp = new '.$SET['class'].'($this->db);');
-            $this->RELATED_OBJECTS[$record_set_name] = $tmp->$method(array(
+            $this->RELATED_OBJECTS[$storage_name] = $tmp->$method(array(
                 array(
                     'table' => $tmp->tableName(),
                     'column' => $tmp->primaryKey(),
@@ -1960,6 +2057,5 @@ class ActiveTable
         return $PARSED;
     } // end parse_columns
 } // end ActiveTable
-
 
 ?>

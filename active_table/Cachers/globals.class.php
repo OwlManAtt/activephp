@@ -8,7 +8,7 @@
  * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
- * @version    2.2.7
+ * @version    2.7.0
  */
 class ActiveTable_Cache_Globals implements ActiveTable_Cache
 {

@@ -75,6 +75,15 @@ class CSVIO extends ActiveTable
     protected $FIELDS = array();
 
     /**
+     * A list of records to be outputted in the header. 
+     *
+     * If this is left empty, no header row will be written.
+     *
+     * @var array
+     **/
+    protected $HEADERS = array();
+
+    /**
      * The normalized form of $FIELDS. Do not define this; it is auto-generated.
      *
      * @var array
@@ -117,16 +126,16 @@ class CSVIO extends ActiveTable
 
         if(strlen($this->quote) > 1)
         {
-            throw ArgumentError("Invalid quote character ({$this->quote}). The quote character may only be one character long or null.");
+            throw new ArgumentError("Invalid quote character ({$this->quote}). The quote character may only be one character long or null.");
         }
 
         if(is_array($this->FIELDS) == false)
         {
-            throw ArgumentError('The field mapping list must be an array.');
+            throw new ArgumentError('The field mapping list must be an array.');
         }
         elseif(sizeof($this->FIELDS) <= 0)
         {
-            throw ArgumentError('The field mapping list cannot be empty.');
+            throw new ArgumentError('The field mapping list cannot be empty.');
         }
         else
         {
@@ -201,33 +210,134 @@ class CSVIO extends ActiveTable
         return $imported;
     } // end loadFile
     
-    public function writeSearchResults($search,$order,$output_file)
+    public function writeSearchResults($args,$order,$output_file)
     {
-        // TODO - header record
-        
-        // Open a file pointer.
-        $fp = fopen($output_file,'w');
-        
-        // Get the list of rows.
-        $results = $this->findBy($search,$order);
+        $start = microtime(true);
+        $SEARCH_VALUES = array();
 
-        // Go through and get the data for the fields we want in this CSV.
-        // Write it out as we go along.
-        foreach($results as $result)
+        if(is_array($args) == false)
         {
-            $RECORD = array();
+            throw new ArgumentError('Args must be an array.',950);
+        }
+
+        $sql_generator = $this->newSqlGenerator();
+        $columns = $this->make_columns($sql_generator);
+        $sql_generator = $columns['sql_generator'];
+
+        if($sql_generator->getMagicPkName() != null)
+        {
+            $sql_generator->addMagicPkToKeys($this->table_name);
+        }
+
+        $sql_generator->addFrom($this->table_name,$this->database);
+        $foo = $this->make_join($this->LOOKUPS,$sql_generator);
+        $sql_generator = $foo['sql_generator'];
+        
+        if(is_array($foo['search_values']) == true)
+        {
+            $SEARCH_VALUES = array_merge($SEARCH_VALUES,$foo['search_values']);
+        }
+        elseif($foo['search_values'] != null)
+        {
+            $SEARCH_VALUES[] = $foo['search_values'];
+        }
+
+        foreach($args as $column => $value)
+        {
+            $where = $this->make_wheres($column,$value,$sql_generator);
+            $sql_generator = $where['sql_generator'];
+            $bar = $where['search_values'];
+
+            if($bar !== null)
+            {
+                if(is_array($bar) == true)
+                {
+                    $SEARCH_VALUES = array_merge($SEARCH_VALUES,$bar);
+                }
+                else
+                {
+                    $SEARCH_VALUES[] = $bar;
+                }
+            }
+        } // end loop
+
+        // TODO - This is taken exactly as-is and put into the query. Probably a *bad* idea...
+        if($order_by != null)
+        {
+            $sql_generator->addOrder($order_by);
+        }
+        
+        $sql = $sql_generator->getQuery('select');
+        $handle = $this->db->prepare($sql);
+        $resource = $this->execute($handle,$SEARCH_VALUES);
+        $this->debug($this->db->last_query,'sql');
+
+        $this->db->freePrepared($handle);
+
+        if(PEAR::isError($resource))
+        {
+            throw new SQLError($resource->getDebugInfo(),$resource->userinfo,909);
+        }
+        
+        // Try to open a file pointer.
+        $fp = fopen($output_file,'w'); 
+
+        if($fp == false)
+        {
+            throw new FileHandleError('The specified file could not be opened and written to.');
+        }
+
+        // Header row.
+        if(sizeof($this->HEADERS) != 0)
+        {
+            fputcsv($fp,$this->HEADERS,$this->seperator,$this->quote);
+        }
+        
+        $class_name = get_class($this);
+        while($resource->fetchInto($row))
+        {
+            $RESULT_DATA = $this->parse_columns($row,$columns['lookup_mapping'],$columns['virtual_mapping']);
             
+            // If things were passed to this instance's constructor (additonal db connectors?),
+            // then pass them on to what we're finding.
+            $arg_fragment = '';
+            if(sizeof($this->CONSTRUCTOR_ARGS) > 0)
+            {
+                $keys = array_keys($this->CONSTRUCTOR_ARGS);
+                $arg_fragment = array();
+
+                foreach($keys as $key)
+                {
+                    $arg_fragment[] = '$this->CONSTRUCTOR_ARGS['.$key.']';
+                } // end key loop
+
+                $arg_fragment = ','.implode(',',$arg_fragment);
+            } // end additional constructor arg handler
+
+            // The eval() is slow, so only do it if we need the additional args fragment.
+            if($arg_fragment != null)
+            {
+                eval('$tmp = new '.$class_name.'($this->db'.$arg_fragment.');');
+            }
+            else
+            {
+                $tmp = new $class_name($this->db);
+            }
+            
+            $tmp->setUp($RESULT_DATA['primary_table'],$RESULT_DATA['lookup_tables'],$RESULT_DATA['virtual_fields']);
+           
+            $RECORD = array();
             foreach($this->FIELDS as $field)
             {
-                eval('$RECORD[$field] = $result->'.ucfirst($field).';');
+                $RECORD[$field] = $tmp->get($field);
             }
             
             fputcsv($fp,$RECORD,$this->seperator,$this->quote);
-        } // end result loop
+        } // end while
 
         fclose($fp);
     
-        return null;    
+        return true;
     } // end writeSearchResults
     
     /**
@@ -242,7 +352,7 @@ class CSVIO extends ActiveTable
             throw new FileEmptyError('The CSV file supplied contains no data.');
         } // end csv is not null
      
-        throw ArgumentError('Method not implemented at this time.');
+        throw new ArgumentError('Method not implemented at this time.');
     } // end loadCSV
 
     /**

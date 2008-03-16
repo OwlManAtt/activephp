@@ -7,7 +7,7 @@
  * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
- * @version    2.7.0
+ * @version    2.3.0
  */
 class ActiveTable_Cache_APC implements ActiveTable_Cache
 {

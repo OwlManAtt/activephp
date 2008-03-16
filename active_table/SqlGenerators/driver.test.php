@@ -7,7 +7,7 @@ $query = new ActiveTable_SQL_Oracle();
 $query->addFrom('customer','eplus');
 $query->addKeys('customer',array('cust_number','company_name'),'a');
 $query->addKeys('sales_category_lookup',array('sales_category_desc'),'b');
-$query->addJoinClause('customer','sales_category_id','sales_category_lookup','sales_category_lookup','sales_category_id','inner','eplus');
+$query->addJoinClause('customer','sales_category_id','sales_category_lookup','sales_category_lookup','sales_category_id','inner','database');
 $query->addWhere('customer','state');
 $query->setSlice(1,10);
 print "== Oracle query:\n\n";

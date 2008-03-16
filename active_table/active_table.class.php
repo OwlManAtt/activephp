@@ -1578,14 +1578,10 @@ class ActiveTable
      */
     protected function load_fields($table=null,$database=null)
     {
+        $database = $this->db->dsn['database'];
         if($table == null)
         {
             $table = $this->table_name;
-        }
-
-        if($database == null && $this->database != null)
-        {
-            $database = $this->database;
         }
 
         $CACHE = $this->cacher->loadTable($table,$database);

@@ -12,6 +12,15 @@
  */
 class ActiveTable_Cache_Globals implements ActiveTable_Cache
 {
+    public function __construct()
+    {
+        // Initialize to avoid PHP notices.
+        if(array_key_exists('ACTIVETABLE_CACHE',$GLOBALS) == false)
+        {
+            $GLOBALS['ACTIVETABLE_CACHE'] = array();
+        }
+    } // end __construct
+    
     public function loadTable($table_name,$database='')
     {
         $datum = $GLOBALS['ACTIVETABLE_CACHE'][$database][$table_name];

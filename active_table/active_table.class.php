@@ -423,7 +423,15 @@ class ActiveTable
                array_key_exists('foreign_primary_key',$SET_DEFINITION) == false
             )
             {
-                eval('$tmp = new '.$SET_DEFINITION['class'].'($this->db'.$arg_fragment.');');
+                // Avoid doing the eval() in most cases - its slow.
+                if($arg_fragment != null)
+                {
+                    eval('$tmp = new '.$SET_DEFINITION['class'].'($this->db'.$arg_fragment.');');
+                }
+                else
+                {
+                    $tmp = new $SET_DEFINITION['class']($this->db);
+                }
 
                 if(array_key_exists('foreign_table',$SET_DEFINITION) == false)
                 {
@@ -1108,7 +1116,16 @@ class ActiveTable
             }
             else
             {
-                eval('$tmp = new '.$class_name.'($this->db'.$arg_fragment.');');
+                // The eval() is slow, so only do it if we need the additional args fragment.
+                if($arg_fragment != null)
+                {
+                    eval('$tmp = new '.$class_name.'($this->db'.$arg_fragment.');');
+                }
+                else
+                {
+                    $tmp = new $class_name($this->db);
+                }
+                
                 $tmp->setUp($RESULT_DATA['primary_table'],$RESULT_DATA['lookup_tables'],$RESULT_DATA['virtual_fields']);
 
                 if($call_load == true)
@@ -1301,8 +1318,8 @@ class ActiveTable
         // Set it up.
         foreach($new_data as $key => $value)
         {
-            $key = ucfirst($key);
-            eval("\$this->set$key(\$value);");
+            $this->set($value,$key);
+            // eval("\$this->set$key(\$value);");
         } // end loop
 
         try
@@ -1390,7 +1407,7 @@ class ActiveTable
             // Fall back to something reasonable:
             if($where_fragment == null)
             {
-                $where_fragment = "{$this->primary_key} = ".$this->db->quoteSmart($this->DATA[$this->primary_key]);
+                $where_fragment = "{$this->primary_key} = ".$this->db->quoteSmart($this->DATA[strtolower($this->primary_key)]);
             }
             
             $resource = $this->db->autoExecute($table_name,$DATA,DB_AUTOQUERY_UPDATE,$where_fragment);
@@ -1548,7 +1565,7 @@ class ActiveTable
         return true;
     } // end setUp
 
-    private function newSqlGenerator()
+    protected function newSqlGenerator()
     {
         return new $this->sql_generator();
     } // end newSqlGenerator
@@ -1559,7 +1576,7 @@ class ActiveTable
      * @param string The table name. This defaults to the current table.
      * @internal
      */
-    private function load_fields($table=null,$database=null)
+    protected function load_fields($table=null,$database=null)
     {
         if($table == null)
         {
@@ -1626,7 +1643,7 @@ class ActiveTable
      * @param string $order_by A raw ORDER BY clause.
      * @return void
      **/
-    private function load_recordset_id_list($RELATED,$order_by=null,$slice_start=null,$slice_end=null)
+    protected function load_recordset_id_list($RELATED,$order_by=null,$slice_start=null,$slice_end=null)
     {
         if(($slice_start === null && $slice_end === null) == false &&
             ($slice_start !== null && $slice_end !== null) == false
@@ -1694,7 +1711,7 @@ class ActiveTable
      *                       is not actually defined.
      * @return void
      **/
-    private function load_recordset($record_set,$storage_name,$order_by=null)
+    protected function load_recordset($record_set,$storage_name,$order_by=null)
     {
         if(array_key_exists($record_set,$this->RELATED) == false)
         {
@@ -1726,7 +1743,7 @@ class ActiveTable
                 $method = 'findOneBy';
             }
 
-            eval('$tmp = new '.$SET['class'].'($this->db);');
+            $tmp = new $SET['class']($this->db);
             $this->RELATED_OBJECTS[$storage_name] = $tmp->$method(array(
                 array(
                     'table' => $tmp->tableName(),
@@ -1744,7 +1761,7 @@ class ActiveTable
      *
      * @internal
      */
-    private function convert_camel_case($studly_word)
+    protected function convert_camel_case($studly_word)
     {
         $simple_word = preg_replace('/([a-z0-9])([A-Z])/','\1_\2',$studly_word);
         $simple_word = strtolower($simple_word);
@@ -1759,7 +1776,7 @@ class ActiveTable
      * @param mixed $sql_generator 
      * @return array
      */
-    private function make_join($LOOKUPS,$sql_generator)
+    protected function make_join($LOOKUPS,$sql_generator)
     {
         if(is_array($LOOKUPS) == true)
         {
@@ -1805,7 +1822,7 @@ class ActiveTable
      * @param object $sql_generator 
      * @return void
      */
-    private function make_wheres($column,$value,$sql_generator)
+    protected function make_wheres($column,$value,$sql_generator)
     {
         // You can pass either an array (if you want othertable.$column,column = value) or 'column' => 'value'.
         if(is_array($value) == true)
@@ -1956,7 +1973,7 @@ class ActiveTable
      * @param mixed $sql_generator 
      * @return void
      */
-    private function make_columns($sql_generator)
+    protected function make_columns($sql_generator)
     {
         $keys = array_keys($this->DATA);
         $fkeys = array();
@@ -2004,13 +2021,16 @@ class ActiveTable
      * @param mixed $VIRTUAL_MAP 
      * @return void
      */
-    private function parse_columns($DATA,$LOOKUP_MAP,$VIRTUAL_MAP)
+    protected function parse_columns($DATA,$LOOKUP_MAP,$VIRTUAL_MAP)
     {
         $PARSED = array(
             'primary_table' => array(),
             'lookup_tables' => array(),
             'virtual_fields' => array(),
         );
+
+        // Do this once up here - we need to map the index number to field name.
+        $DATA_COLUMNS = array_keys($this->DATA);
 
         foreach($DATA as $key => $value)
         {
@@ -2026,9 +2046,7 @@ class ActiveTable
             if($table_id == 'x') // X is for primary.
             {
                 $table = $this->table_name;
-
-                $column = array_keys($this->DATA);
-                $column = $column[$column_id];
+                $column = $DATA_COLUMNS[$column_id];
             }
             elseif($table_id == 'virt')
             {

@@ -285,7 +285,6 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
             throw new SQLGenerationError('Limit has been set for this query; cannot return a slice.');
         }
         
-        $end++; 
         $total = $end - $start;
         $this->limit = "$start,$total";
     } // end setSlice

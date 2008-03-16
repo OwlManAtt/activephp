@@ -1055,11 +1055,6 @@ class ActiveTable
 
         if($slice_start !== null && $slice_end !== null)
         {
-            if($slice_start === 0)
-            {
-                $slice_start = 1;
-            }
-            
             $sql_generator->setSlice($slice_start,$slice_end);
         } // end slice
         

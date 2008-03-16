@@ -163,7 +163,7 @@ interface ActiveTable_SQL
     /**
      * Generate a SQL query to return a slice from a larger result set.
      *
-     * @param integer $start The position to begin the slice at. Start from 1, not 0.
+     * @param integer $start The position to begin the slice at. Start at 0, not 1.
      * @param integer $end The position to end the slice at.
      **/
     public function setSlice($start,$end);

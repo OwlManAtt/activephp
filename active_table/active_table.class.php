@@ -1573,13 +1573,20 @@ class ActiveTable
      */
     protected function load_fields($table=null,$database=null)
     {
-        $database = $this->db->dsn['database'];
+        // OWNER name.
+        if($database == null)
+        {
+            $database = $this->database;
+        }
+        
+        // DB name from DSN.
+        $database_schema_name = $this->db->dsn['database'];
         if($table == null)
         {
             $table = $this->table_name;
         }
 
-        $CACHE = $this->cacher->loadTable($table,$database);
+        $CACHE = $this->cacher->loadTable($table,$database_schema_name);
 
         if(is_array($CACHE) == true)
         {
@@ -1621,7 +1628,7 @@ class ActiveTable
                 $RESULT[strtolower($ROW['field'])] = null;
             } // end loop
 
-            $this->cacher->addTable($table,$RESULT,$database);
+            $this->cacher->addTable($table,$RESULT,$database_schema_name);
         } // end not cached
 
         return $RESULT;

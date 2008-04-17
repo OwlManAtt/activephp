@@ -281,6 +281,12 @@ class ActiveTable_SQL_Sqlite3 implements ActiveTable_SQL
         $total = $end - $start;
         $this->limit = "$start,$total";
     } // end setSlice
+
+    public function getPearDescribeEnabled()
+    {
+        return true;
+    } // end getPerDescribeEnabled
+
 } // end ActiveTable_MySQL_SQL
 
 ?>

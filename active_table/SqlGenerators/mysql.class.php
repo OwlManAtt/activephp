@@ -288,6 +288,16 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
         $total = $end - $start;
         $this->limit = "$start,$total";
     } // end setSlice
+
+    public function getPearDescribeEnabled()
+    {
+        // The PEAR::DB way of doing this is to select a row from the table
+        // and then use the mysql_ functions to get details such as datatype.
+        // In a large table, that would be horribly horribly slow. Describe, however,
+        // will have reliable response times.
+
+        return false;
+    } // end getPerDescribeEnabled
 } // end ActiveTable_MySQL_SQL
 
 ?>

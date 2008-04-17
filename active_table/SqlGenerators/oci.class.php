@@ -301,6 +301,11 @@ class ActiveTable_SQL_Oracle implements ActiveTable_SQL
         $this->slice_start = $start;
         $this->slice_end = $end;
     } // end setSlice
+
+    public function getPearDescribeEnabled()
+    {
+        return false;
+    } // end getPerDescribeEnabled
 } // end ActiveTable_Oracle_SQL
 
 ?>

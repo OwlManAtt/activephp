@@ -67,6 +67,16 @@ interface ActiveTable_SQL
     public function getLastInsertId($table);
 
     /**
+     * Use the PEAR::DB/MDB2-native methods of describing the table.
+     *
+     * True = use db->tableInfo()
+     * False = query(this->getDescribeTable())
+     * 
+     * @return bool 
+     **/
+    public function getPearDescribeEnabled();
+
+    /**
      * Return the SQL statement that performs a describe table.
      *
      * This is used for getting the column list back.

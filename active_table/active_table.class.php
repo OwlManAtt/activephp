@@ -1413,6 +1413,7 @@ class ActiveTable
                 $where_fragment = "{$this->primary_key} = ".$this->db->quoteSmart($this->DATA[strtolower($this->primary_key)]);
             }
             
+            $this->debug($where_fragment,'sql'); 
             $resource = $this->db->autoExecute($table_name,$DATA,DB_AUTOQUERY_UPDATE,$where_fragment);
 
             if(PEAR::isError($resource))
@@ -1604,8 +1605,50 @@ class ActiveTable
         else
         {
             $this->debug("Cached structure not found for $table; describing...",'cache');
+            
+            $RESULT = $this->describe_table($table,$database);
+            $this->cacher->addTable($table,$RESULT,$database_schema_name);
+        } // end not cached
 
-            $sql_generator = $this->newSqlGenerator(); 
+        return $RESULT;
+    } // end load_fields
+
+    private function describe_table($table,$database)
+    {
+        $sql_generator = $this->newSqlGenerator(); 
+ 
+        $RESULT = array();
+        
+        // If this is the primary table and the DB supports magic PKs, include it in the describe.
+        // Should be in position zero (cx_0).
+        if($sql_generator->getMagicPkName() != null && $table == $this->table_name)
+        {
+            $RESULT[strtolower($sql_generator->getMagicPkName())] = null;
+        } // end add rowid
+        
+        if($sql_generator->getPearDescribeEnabled() == true)
+        {
+            $this->debug("PEAR #getInfo() method being used to describe table.",'info');
+
+            $COLUMNS = $this->db->tableInfo($table);
+            if(PEAR::isError($COLUMNS))
+            {
+                // Unpatched SQLite3 driver, probably.
+                if($COLUMNS->getMessage() == 'DB Error: DB backend not capable')
+                {
+                    throw new SQLGenerationError('RDBMS driver does not support PEAR::DB#tableInfo(). If you are using SQLite3, please ensure you have installed the patched sqlite3.php driver!');
+                }
+            }
+
+            foreach($COLUMNS as $COLUMN)
+            {
+                $RESULT[$COLUMN['name']]  = null;
+            }
+        } // end use PEAR::DB tableInfo()
+        else
+        {
+            $this->debug("Custom method being used to describe table.",'info');
+
             $sql = $sql_generator->getDescribeTable($table,$database);
 
             $resource = $this->db->query($sql);
@@ -1615,15 +1658,6 @@ class ActiveTable
             {
                 throw new SQLError($resource->getDebugInfo(),$resource->userinfo,905);
             }
-            
-            $RESULT = array();
-            
-            // If this is the primary table and the DB supports magic PKs, include it in the describe.
-            // Should be in position zero (cx_0).
-            if($sql_generator->getMagicPkName() != null && $table == $this->table_name)
-            {
-                $RESULT[strtolower($sql_generator->getMagicPkName())] = null;
-            } // end add rowid
             
             while($resource->fetchInto($ROW))
             {
@@ -1635,12 +1669,10 @@ class ActiveTable
                 
                 $RESULT[strtolower($ROW['field'])] = null;
             } // end loop
-
-            $this->cacher->addTable($table,$RESULT,$database_schema_name);
-        } // end not cached
-
+        } // end custom describe SQL
+        
         return $RESULT;
-    } // end load_fields
+    } // end describe_table
 
     /**
      * load_recordset_id_list 

@@ -13,7 +13,6 @@
  **/
 require_once('SqlGenerators/interface.inc.php');
 require_once('SqlGenerators/mysql.class.php');
-require_once('SqlGenerators/sqlite3.class.php');
 require_once('SqlGenerators/oci.class.php');
 
 /**
@@ -324,13 +323,6 @@ class ActiveTable
                 break;
             } // end oci8
 
-            case 'sqlite3':
-            {
-                $this->sql_generator = 'ActiveTable_SQL_Sqlite3';
-
-                break;
-            } // end sqlite3
-
             default:
             {
                 throw new ArgumentError('Unsupported RDBMS specified in phptype.',20);
@@ -464,7 +456,7 @@ class ActiveTable
 
             if(array_key_exists('local_key',$SET_DEFINITION) == false)
             {
-                throw new ArgumentError("Local key not defined in record set $record_set_name.",912);
+                throw new ArgumentError("Local key not definedin record set $record_set_name.",912);
             }
             
             // Intialize the ID list.
@@ -480,7 +472,7 @@ class ActiveTable
         } // end args > 1
        
         $total = round((microtime(true) - $start),4);
-        $this->debug("#__construct() executed in '$total' seconds.",'method_time'); 
+        $this->debug("#__constructt() executed in '$total' seconds.",'method_time'); 
     } // end __construct
 
     /**

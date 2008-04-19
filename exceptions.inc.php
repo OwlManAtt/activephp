@@ -153,4 +153,40 @@ class SQLError extends Exception
 
 } // end SQLError
 
+/**
+ * ArgumentError to be thrown when somebody inputs duff data. 
+ * 
+ * @uses Exception
+ * @package ActivePHP
+ * @copyright 2007 Nicholas Evans
+ * @author Nick 'Owl' Evans <owlmanatt@gmail> 
+ * @license http://www.gnu.org/licenses/gpl-3.0.txt GNU GPL v3
+ **/
+class ArgumentError extends Exception
+{   
+    /**
+     * Sets up the exception. 
+     * 
+     * @param   string    $message    The error text.
+     * @param   int       $code       An error code.
+     * access   private
+     * @return void
+    */
+    public function __construct($message,$code = 0)
+    {
+        parent::__construct($message,$code);
+    }
+
+    /**
+     * Convert the exception into a string. 
+     * 
+     * @return string
+    */
+    public function __toString()
+    {
+        return __CLASS__ . ": [{$this->code}]: {$this->message} in '{$this->file}' on line {$this->line}. SQL specified was: {$this->sql}\n";
+    }
+
+} // end ArgumentError
+
 ?>

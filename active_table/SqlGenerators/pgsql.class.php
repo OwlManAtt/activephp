@@ -24,6 +24,7 @@ class ActiveTable_SQL_PgSQL implements ActiveTable_SQL
     protected $where = array();
     protected $order = '';
     protected $limit = '';
+    protected $offset = '';
     public $magic_pk_name = null;
 
     public function __construct()
@@ -90,7 +91,12 @@ class ActiveTable_SQL_PgSQL implements ActiveTable_SQL
 
                 if($this->limit != null)
                 {
-                    $sql .= "LIMIT {$this->limit}";
+                    $sql .= "LIMIT {$this->limit}\n";
+                }
+
+                if($this->offset != null)
+                {
+                    $sql .= "OFFSET {$this->offset}\n";
                 }
 
                 break;
@@ -229,9 +235,11 @@ class ActiveTable_SQL_PgSQL implements ActiveTable_SQL
     {
         return "
             SELECT 
-                pg_attribute.attname AS field 
+                pg_attribute.attname AS field,
+                pg_type.typname AS type 
             FROM pg_class 
             INNER JOIN pg_attribute ON pg_class.oid = pg_attribute.attrelid 
+            INNER JOIN pg_type ON pg_attribute.atttypid = pg_type.oid
             WHERE pg_class.relname = '{$table_name}'
             AND pg_attribute.attnum > 0
         ";
@@ -287,8 +295,9 @@ class ActiveTable_SQL_PgSQL implements ActiveTable_SQL
         
         $end++; 
         $total = $end - $start;
-        $this->limit = "$start,$total";
+        $this->limit = $start;
+        $this->offset = $total;
     } // end setSlice
-} // end ActiveTable_MySQL_SQL
+} // end ActiveTable_PgSQL_SQL
 
 ?>

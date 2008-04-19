@@ -1360,9 +1360,11 @@ class ActiveTable
         $DATA = $this->DATA;
 
         // PEAR::DB will try to insert NULL instead of '' if the value is null.
+        // This makes ActiveTable forgiving of folly.
         foreach($DATA as $key => $value)
         {
-            if($value == null)
+            // 0 is different from null.
+            if($value === null)
             {
                 $value = '';
             }
@@ -1631,7 +1633,15 @@ class ActiveTable
                     $ROW[strtolower($key)] = $value;
                 }
                 
-                $RESULT[strtolower($ROW['field'])] = null;
+                // Setting this to (int)0 for int fields will make ActiveTable
+                // more forgiving.
+                $default_value = null;
+                if(preg_match('/^int*/',$ROW['type']) == true)
+                {
+                    $default_value = 0;
+                }
+                
+                $RESULT[strtolower($ROW['field'])] = $default_value;
             } // end loop
 
             $this->cacher->addTable($table,$RESULT,$database);

@@ -14,6 +14,7 @@
 require_once('SqlGenerators/interface.inc.php');
 require_once('SqlGenerators/mysql.class.php');
 require_once('SqlGenerators/oci.class.php');
+require_once('SqlGenerators/pgsql.class.php');
 
 /**
  * Table definition cacher libraries. 
@@ -319,6 +320,13 @@ class ActiveTable
             case 'oci8':
             {
                 $this->sql_generator = 'ActiveTable_SQL_Oracle';
+
+                break;
+            } // end oci8
+
+            case 'pgsql':
+            {
+                $this->sql_generator = 'ActiveTable_SQL_PgSQL';
 
                 break;
             } // end oci8

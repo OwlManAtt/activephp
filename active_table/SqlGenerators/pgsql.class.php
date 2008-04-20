@@ -23,6 +23,7 @@ class ActiveTable_SQL_PgSQL implements ActiveTable_SQL
     protected $join = array();
     protected $where = array();
     protected $order = '';
+    protected $order_direction;
     protected $limit = '';
     protected $offset = '';
     public $magic_pk_name = null;
@@ -59,7 +60,23 @@ class ActiveTable_SQL_PgSQL implements ActiveTable_SQL
 
     public function addOrder($sql_fragment)
     {
-        $this->order = $sql_fragment;
+        if(is_array($sql_fragment) == false)
+        {
+            $this->order = $sql_fragment;
+        }
+        else
+        {
+            $ORDER = array();
+            $COLUMNS = $sql_fragment['columns'];
+
+            foreach($COLUMNS as $COLUMN)
+            {
+                $ORDER[] = "\"{$COLUMN['table']}\".\"{$COLUMN['column']}\"";
+            }
+
+            $this->order = $ORDER;
+            $this->order_direction = $sql_fragment['direction'];
+        }
     } // end addOrder
 
     public function getQuery($verb)
@@ -86,7 +103,14 @@ class ActiveTable_SQL_PgSQL implements ActiveTable_SQL
 
                 if($this->order != null)
                 {
-                    $sql .= $this->order."\n";
+                    if(is_array($this->order) == true)
+                    {
+                        $sql .= "ORDER BY ".implode(', ',$this->order)." {$this->order_direction}\n";
+                    }
+                    else
+                    {
+                        $sql .= $this->order."\n";
+                    }
                 }
 
                 if($this->limit != null)
@@ -186,11 +210,11 @@ class ActiveTable_SQL_PgSQL implements ActiveTable_SQL
                 $like = '';
                 if($type == 'like')
                 {
-                    $like = 'LIKE';
+                    $like = 'ILIKE';
                 }
                 elseif($type == 'not_like')
                 {
-                    $like = 'NOT LIKE';
+                    $like = 'NOT ILIKE';
                 }
                 
                 $this->where[] = "\"{$table}\".\"{$column}\" {$like} ?";
@@ -296,7 +320,7 @@ class ActiveTable_SQL_PgSQL implements ActiveTable_SQL
         $end++; 
         $total = $end - $start;
         $this->limit = $total;
-        $this->offset = $start;
+        $this->offset = $start - 1;
     } // end setSlice
 
     public function getReservedWordEscapeCharacter()

@@ -1,6 +1,6 @@
 <?php
 /**
- * Classes for writing MySQL 4 and 5 compatible queries.
+ * Classes for writing PostgreSQL queryes. 
  *
  * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
@@ -9,22 +9,23 @@
  */
 
 /**
- * MySQL SQL driver for ActiveTable.
+ * PostgreSQL SQL driver for ActiveTable.
  *
  * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
- * @copyright  2007, Yasashii Syndicate
+ * @copyright  2008, Yasashii Syndicate
  * @version    Release: @package_version@
  **/
-class ActiveTable_SQL_MySQL implements ActiveTable_SQL
+class ActiveTable_SQL_PgSQL implements ActiveTable_SQL
 {   
     protected $columns = array();
     protected $from = '';
     protected $join = array();
     protected $where = array();
     protected $order = '';
-    protected $order_direction = '';
+    protected $order_direction;
     protected $limit = '';
+    protected $offset = '';
     public $magic_pk_name = null;
 
     public function __construct()
@@ -70,7 +71,7 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
 
             foreach($COLUMNS as $COLUMN)
             {
-                $ORDER[] = "`{$COLUMN['table']}`.`{$COLUMN['column']}`";
+                $ORDER[] = "\"{$COLUMN['table']}\".\"{$COLUMN['column']}\"";
             }
 
             $this->order = $ORDER;
@@ -114,7 +115,12 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
 
                 if($this->limit != null)
                 {
-                    $sql .= "LIMIT {$this->limit}";
+                    $sql .= "LIMIT {$this->limit}\n";
+                }
+
+                if($this->offset != null)
+                {
+                    $sql .= "OFFSET {$this->offset}\n";
                 }
 
                 break;
@@ -128,11 +134,11 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
     {
         if($database == null)
         {
-            $this->from = "`$table`";
+            $this->from = "\"{$table}\"";
         }
         else
         {
-            $this->from = "`$database`.`$table`";
+            $this->from = "\"{$database}\".\"{$table}\"";
         }
     } // end addFrom
 
@@ -147,7 +153,7 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
             case '<>':
             case '=':
             {
-                $this->where[] = "`$table`.`$column` $type ?";
+                $this->where[] = "\"{$table}\".\"{$column}\" {$type} ?";
 
                 break;
             } // end >= > <= < <> =
@@ -175,7 +181,7 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
                     throw new ArgumentError('Attempting to do IN with no data.');
                 }
                 
-                $this->where[] = "`$table`.`$column` $in ($placeholders)";
+                $this->where[] = "\"{$table}\".\"{$column}\" $in ({$placeholders})";
     
                 break;
             } // end in, not_in
@@ -193,7 +199,7 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
                     $is = 'IS NOT NULL';
                 }
                 
-                $this->where[] = "`$table`.`$column` $is";
+                $this->where[] = "\"{$table}\".\"{$column}\" {$is}";
     
                 break;
             } // end is, is_not
@@ -204,14 +210,14 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
                 $like = '';
                 if($type == 'like')
                 {
-                    $like = 'LIKE';
+                    $like = 'ILIKE';
                 }
                 elseif($type == 'not_like')
                 {
-                    $like = 'NOT LIKE';
+                    $like = 'NOT ILIKE';
                 }
                 
-                $this->where[] = "`$table`.`$column` $like ?";
+                $this->where[] = "\"{$table}\".\"{$column}\" {$like} ?";
 
                 break;
             } // end like, not_like
@@ -238,7 +244,7 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
         {
             if($key != null)
             {
-                $this->columns[] = "`{$table}`.`{$key}` AS `c{$table_id}_{$id}`";
+                $this->columns[] = "\"{$table}\".\"{$key}\" AS c{$table_id}_{$id}";
             }
         } // end column loop
 
@@ -246,19 +252,21 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
 
     public function addVirtualKey($statement,$index)
     {
-        $this->columns[] = "$statement AS `cVIRT_$index`";
+        $this->columns[] = "$statement AS cVIRT_$index";
     } // end addVirtualKey
     
     public function getDescribeTable($table_name,$database=null)
     {
-        if($database == null)
-        {
-            return "DESCRIBE `$table_name`";
-        }
-        else
-        {
-            return "DESCRIBE `$database`.`$table_name`";
-        }
+        return "
+            SELECT 
+                pg_attribute.attname AS field,
+                pg_type.typname AS type 
+            FROM pg_class 
+            INNER JOIN pg_attribute ON pg_class.oid = pg_attribute.attrelid 
+            INNER JOIN pg_type ON pg_attribute.atttypid = pg_type.oid
+            WHERE pg_class.relname = '{$table_name}'
+            AND pg_attribute.attnum > 0
+        ";
     } // end getDescribeTable
     
     // public function addJoinClause($LOOKUPS)
@@ -289,12 +297,12 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
             } // end inner
         } // end join switch
 
-        $this->join[] = "$join `{$foreign_table}` `{$foreign_table_alias}` ON `{$local_table}`.`{$local_key}` = `{$foreign_table_alias}`.`{$foreign_key}`";
+        $this->join[] = "$join \"{$foreign_table}\" \"{$foreign_table_alias}\" ON \"{$local_table}\".\"{$local_key}\" = \"{$foreign_table_alias}\".\"{$foreign_key}\"";
     } // end addJoinClause
 
     public function getLastInsertId($table)
     {
-        return "SELECT last_insert_id() AS last_insert_id";
+        return "SELECT lastval() AS last_insert_id";
     } // end getLastInsertId
 
     public function buildOneOffLimit($condition_number,$limit_number)
@@ -309,15 +317,17 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
             throw new SQLGenerationError('Limit has been set for this query; cannot return a slice.');
         }
         
+        $end++; 
         $total = $end - $start;
-        $this->limit = "$start,$total";
+        $this->limit = $total;
+        $this->offset = $start - 1;
     } // end setSlice
 
     public function getReservedWordEscapeCharacter()
     {
-        return '`';
+        return '"';
     } // end getReservedWordEscapeCharacter
 
-} // end ActiveTable_MySQL_SQL
+} // end ActiveTable_PgSQL_SQL
 
 ?>

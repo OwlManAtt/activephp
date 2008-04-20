@@ -14,6 +14,7 @@
 require_once('SqlGenerators/interface.inc.php');
 require_once('SqlGenerators/mysql.class.php');
 require_once('SqlGenerators/oci.class.php');
+require_once('SqlGenerators/pgsql.class.php');
 
 /**
  * Table definition cacher libraries. 
@@ -319,6 +320,13 @@ class ActiveTable
             case 'oci8':
             {
                 $this->sql_generator = 'ActiveTable_SQL_Oracle';
+
+                break;
+            } // end oci8
+
+            case 'pgsql':
+            {
+                $this->sql_generator = 'ActiveTable_SQL_PgSQL';
 
                 break;
             } // end oci8
@@ -1047,11 +1055,55 @@ class ActiveTable
             //}
         } // end loop
 
-        // TODO - This is taken exactly as-is and put into the query. Probably a *bad* idea...
         if($order_by != null)
         {
-            $sql_generator->addOrder($order_by);
-        }
+            // Legacy mode - SQL fragment. This was how it was originally implemented, and
+            // left like this for 1y+. I have lots and lots of code that depends on this working.
+            // When I migrate all of my code, I'll cut this out.
+            if(is_array($order_by) == false)
+            {
+                $sql_generator->addOrder($order_by);
+            }
+            else
+            {
+                /*
+                * Array (
+                * 'columns' => array(
+                *   array(
+                *      'table' => 'tablename',
+                *      'column' => 'id',
+                *   ), 
+                * )
+                * 'direction' => asc|desc
+                * )
+                */
+                if(array_key_exists('direction',$order_by) == false)
+                {
+                    throw new ArgumentError('No direction specified for ORDER BY.');
+                }
+                else
+                {
+                    if(in_array(strtolower($order_by['direction']),array('desc','asc')) == false)
+                    {
+                        throw new ArgumentError("Invalid direction '{$order_by['direction']}' specified for ORDER BY clause.");
+                    }
+                }
+
+                if(array_key_exists('columns',$order_by) == false)
+                {
+                    throw new ArgumentError('No columns specified for ORDER BY clause.');
+                }
+                else
+                {
+                    if(sizeof($order_by['columns']) == 0)
+                    {
+                        throw new ArgumentError('Empty set of columns specified for ORDER BY clause.');
+                    }
+                }
+                
+                $sql_generator->addOrder($order_by);
+            } // end handle normalized order by 
+        } // end order by specified
 
         if($slice_start !== null && $slice_end !== null)
         {
@@ -1346,35 +1398,43 @@ class ActiveTable
 
         $DATA = $this->DATA;
 
-        // PEAR::DB will try to insert NULL instead of '' if the value is null.
-        foreach($DATA as $key => $value)
-        {
-            if($value == null)
-            {
-                $value = '';
-            }
-                
-            $DATA[$key] = $value;
-        } // end loop
+        // PEAR::DB's autoExecute facility doesn't concern itself with escaping reserved words.
+        // It would be a large architectural change to fix that, so I'll just work around it in
+        // here instead of fixing it there and trying to get a patch pushed through.
+        $escape_char = $this->newSqlGenerator()->getReservedWordEscapeCharacter();
 
+        // Oracle users need db.table.
+        $table_name = "{$escape_char}{$this->table_name}{$escape_char}";
+        if($this->database != '')
+        {
+            $table_name = "{$escape_char}{$this->database}{$escape_char}.{$escape_char}{$this->table_name}{$escape_char}";
+        }
+        
         if($this->allow_pk_write == false)
         {
             unset($DATA[$this->primary_key]);
         }
+
+        // PEAR::DB will try to insert NULL instead of '' if the value is null.
+        // This makes ActiveTable forgiving of folly.
+        foreach($DATA as $key => $value)
+        {
+            // 0 is different from null.
+            if($value === null)
+            {
+                $value = '';
+            }
+                
+            $DATA["{$escape_char}$key{$escape_char}"] = $value;
+            unset($DATA[$key]);
+        } // end loop
 
         // Do not attempt to set the magic PK field to anything...it's 'virtual'-ish.
         if($this->newSqlGenerator()->getMagicPkName() != null)
         {
             unset($DATA[strtolower($this->newSqlGenerator()->getMagicPkName())]);
         } // end has magic PK
-        
-        // Oracle users need db.table.
-        $table_name = $this->table_name;
-        if($this->database != '')
-        {
-            $table_name = "{$this->database}.{$this->table_name}";
-        }
-        
+       
         if($this->record_state == 'new')
         {
             $resource = $this->db->autoExecute($table_name,$DATA,DB_AUTOQUERY_INSERT);
@@ -1625,7 +1685,15 @@ class ActiveTable
                     $ROW[strtolower($key)] = $value;
                 }
                 
-                $RESULT[strtolower($ROW['field'])] = null;
+                // Setting this to (int)0 for int fields will make ActiveTable
+                // more forgiving.
+                $default_value = null;
+                if(preg_match('/^int*/',$ROW['type']) == true)
+                {
+                    $default_value = 0;
+                }
+                
+                $RESULT[strtolower($ROW['field'])] = $default_value;
             } // end loop
 
             $this->cacher->addTable($table,$RESULT,$database_schema_name);

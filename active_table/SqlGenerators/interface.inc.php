@@ -168,5 +168,12 @@ interface ActiveTable_SQL
      **/
     public function setSlice($start,$end);
 
+    /**
+     * Get the escape character used around a reserved word. 
+     * 
+     * @return string 
+     **/
+    public function getReservedWordEscapeCharacter();
+
 } // end ActiveTable_SQL
 ?>

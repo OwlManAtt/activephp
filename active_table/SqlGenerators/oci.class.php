@@ -22,6 +22,7 @@ class ActiveTable_SQL_Oracle implements ActiveTable_SQL
     protected $from = array();
     protected $where = array();
     protected $order = '';
+    protected $order_direction;
     public $magic_pk_name = 'rowid';
     
     // If get_slice is true, a slice query will be generated. 
@@ -62,7 +63,23 @@ class ActiveTable_SQL_Oracle implements ActiveTable_SQL
 
     public function addOrder($sql_fragment)
     {
-        $this->order = $sql_fragment;
+        if(is_array($sql_fragment) == false)
+        {
+            $this->order = $sql_fragment;
+        }
+        else
+        {
+            $ORDER = array();
+            $COLUMNS = $sql_fragment['columns'];
+
+            foreach($COLUMNS as $COLUMN)
+            {
+                $ORDER[] = "\"{$COLUMN['table']}\".\"{$COLUMN['column']}\"";
+            }
+
+            $this->order = $ORDER;
+            $this->order_direction = $sql_fragment['direction'];
+        }
     } // end addOrder
 
     public function getQuery($verb)
@@ -84,7 +101,14 @@ class ActiveTable_SQL_Oracle implements ActiveTable_SQL
 
                 if($this->order != null)
                 {
-                    $sql .= $this->order."\n";
+                    if(is_array($this->order) == true)
+                    {
+                        $sql .= "ORDER BY ".implode(', ',$this->order)." {$this->order_direction}\n";
+                    }
+                    else
+                    {
+                        $sql .= $this->order."\n";
+                    }
                 }
 
                 if($this->get_slice == true)
@@ -301,6 +325,13 @@ class ActiveTable_SQL_Oracle implements ActiveTable_SQL
         $this->slice_start = $start;
         $this->slice_end = $end;
     } // end setSlice
+
+    public function getReservedWordEscapeCharacter()
+    {
+        // TODO. I think ' works, but I need to test that.
+        return '';
+    } // end getReservedWordEscapeCharacter
+
 } // end ActiveTable_Oracle_SQL
 
 ?>

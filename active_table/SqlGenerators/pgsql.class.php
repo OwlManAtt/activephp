@@ -295,9 +295,15 @@ class ActiveTable_SQL_PgSQL implements ActiveTable_SQL
         
         $end++; 
         $total = $end - $start;
-        $this->limit = $start;
-        $this->offset = $total;
+        $this->limit = $total;
+        $this->offset = $start;
     } // end setSlice
+
+    public function getReservedWordEscapeCharacter()
+    {
+        return '"';
+    } // end getReservedWordEscapeCharacter
+
 } // end ActiveTable_PgSQL_SQL
 
 ?>

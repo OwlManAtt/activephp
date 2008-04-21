@@ -4,8 +4,8 @@
  *
  * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
- * @copyright  2007, Yasashii Syndicate 
- * @version    2.3.0
+ * @copyright  2007-2008, Yasashii Syndicate 
+ * @version    2.4.0
  **/
 
 /**
@@ -32,10 +32,10 @@ require_once('Cachers/apc.class.php');
  *
  * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
- * @copyright  2007, Yasashii Syndicate
+ * @copyright  2007-2008, Yasashii Syndicate
  * @version    Release: @package_version@
  */
-class ActiveTable
+abstract class ActiveTable
 {
     /**
      * A PEAR::DB database connector.
@@ -950,9 +950,26 @@ class ActiveTable
      *
      * *NOTE* - At this time, nesting and ORs are not supported.
      *
+     * As far as ORDER BY goes, you have two options:
+     *
+     *  1. SQL fragment (deprecated, don't do this with new code)
+     *  2. Normalized array that should look like so:
+     *
+     * <code>
+     * $ORDER_BY = array (
+     *  'direction' => 'ASC|DESC', // either work
+     *  'columns' => array(
+     *    array(
+     *       'table' => 'tablename',
+     *       'column' => 'id',
+     *    ), 
+     *  )
+     * );
+     * </code>
+     *
      * @param array Things to search on. Everything is an AND and nesting
      *              is not supported.
-     * @param string ORDER BY clause.
+     * @param string|array ORDER BY clause or an array structure specified above.
      * @param boolean Return count instead of results, true or false.
      * @throws SQLError If an invalid SQL statement is generated (usually due to
      *                  an invalid column name getting mogged in somewhere),
@@ -1066,17 +1083,6 @@ class ActiveTable
             }
             else
             {
-                /*
-                * Array (
-                * 'columns' => array(
-                *   array(
-                *      'table' => 'tablename',
-                *      'column' => 'id',
-                *   ), 
-                * )
-                * 'direction' => asc|desc
-                * )
-                */
                 if(array_key_exists('direction',$order_by) == false)
                 {
                     throw new ArgumentError('No direction specified for ORDER BY.');

@@ -1,27 +1,38 @@
-===========================================
-===========================================
-====       README for ActiveTable      ====
-===========================================
-===========================================
-=== Author:    OwlManAtt                ===
-=== Updated:   2007-08-16               ===
-===========================================
+=====================================================
+=     _        _   _           ____  _   _ ____     =
+=    / \   ___| |_(_)_   _____|  _ \| | | |  _ \    =
+=   / _ \ / __| __| \ \ / / _ \ |_) | |_| | |_) |   =
+=  / ___ \ (__| |_| |\ V /  __/  __/|  _  |  __/    =
+= /_/   \_\___|\__|_| \_/ \___|_|   |_| |_|_|       =
+=====================================================
+= Author:  Nicholas 'OwlManAtt' Evans               =
+= Email:   owlmanatt@gmail.com                      =
+= Updated: 2008-04-20                               =
+= URL:     http://aphp.yasashiisyndicate.org        =
+=====================================================
 
 == Overview ==
-ActivePHP (otherwise known as ActiveTable) is a very simple implementation of the Active Record pattern in PHP5.
-Using ActiveTable, you can define a class that will automatically define setters/getters for columns and 
-provide you with the basic CRUD methods needed in any application.
+ActivePHP (otherwise known as ActiveTable) is a very simple implementation of the Active Record 
+pattern in PHP5. Using ActiveTable, you can define a class that will automatically define 
+setters/getters for columns and provide you with the basic CRUD methods needed in any application.
 
-ActivePHP supports MySQL and Oracle (8i and 9i have been tested). It uses the PEAR::DB abstraction layer for doing most of its work, so any limitations on what 
-database this library can interact with can be resolved easily; another SQL generation driver for your RDBMS of choice is all that is needed.
+ActivePHP supports MySQL and Oracle (8i and 9i have been tested). It uses the PEAR::DB abstraction
+layer for doing most of its work, so any limitations on what database this library can interact 
+with can be resolved easily; another SQL generation driver for your RDBMS of choice is all that 
+is needed.
+
+Documentation is available in-line as phpdoc blocks (and can be compiled into nice HTML pages),
+and even more useful documentation is available at <http://aphp.yasashiisyndicate.org>.
 
 == Requirements ==
 ActiveTable requires the following:
 
 * PHP 5 (5.1 preferred)
     * PEAR and the PEAR::DB and PEAR::Log packages.
-* MySQL (4 or 5), Oracle (8i, 9i, or 10g)
+* MySQL (4 or 5), Oracle (8i, 9i, or 10g), PostgreSQL (tested on 8.3, should work for 
+    old versions too)
     * MySQL: Table(s) with an auto-incrememting primary key.
+    * PostgreSQL: Table(s) with an auto-incrementing primary key (a SERIAL column is fine)
     * Oracle uses the 'rowid' present in every table.
 
 == Use ==

@@ -4,8 +4,8 @@
  *
  * @package    ActivePHP 
  * @author     OwlManAtt <owlmanatt@gmail.com> 
- * @copyright  2007, Yasashii Syndicate 
- * @version    2.3.0
+ * @copyright  2007-2008, Yasashii Syndicate 
+ * @version    2.4.0
  **/
 
 /**

@@ -5,7 +5,7 @@
  * @package    ActivePHP
  * @author     OwlManAtt <owlmanatt@gmail.com> 
  * @copyright  2007, Yasashii Syndicate 
- * @version    2.3.0 
+ * @version    2.4.0 
  **/
 
 // Required parts - the exception library.
@@ -15,7 +15,6 @@ $base_path = realpath(getcwd());
 $MODULES = array(
     'active_table',
     'csvio',
-    'dagg'
 );
 
 foreach($MODULES as $module)

@@ -1074,41 +1074,7 @@ abstract class ActiveTable
 
         if($order_by != null)
         {
-            // Legacy mode - SQL fragment. This was how it was originally implemented, and
-            // left like this for 1y+. I have lots and lots of code that depends on this working.
-            // When I migrate all of my code, I'll cut this out.
-            if(is_array($order_by) == false)
-            {
-                $sql_generator->addOrder($order_by);
-            }
-            else
-            {
-                if(array_key_exists('direction',$order_by) == false)
-                {
-                    throw new ArgumentError('No direction specified for ORDER BY.');
-                }
-                else
-                {
-                    if(in_array(strtolower($order_by['direction']),array('desc','asc')) == false)
-                    {
-                        throw new ArgumentError("Invalid direction '{$order_by['direction']}' specified for ORDER BY clause.");
-                    }
-                }
-
-                if(array_key_exists('columns',$order_by) == false)
-                {
-                    throw new ArgumentError('No columns specified for ORDER BY clause.');
-                }
-                else
-                {
-                    if(sizeof($order_by['columns']) == 0)
-                    {
-                        throw new ArgumentError('Empty set of columns specified for ORDER BY clause.');
-                    }
-                }
-                
-                $sql_generator->addOrder($order_by);
-            } // end handle normalized order by 
+            $sql_generator = $this->make_order_by($order_by,$sql_generator);
         } // end order by specified
 
         if($slice_start !== null && $slice_end !== null)
@@ -1213,10 +1179,9 @@ abstract class ActiveTable
      */
     public function findOneBy($ARGS,$order_by='')
     {
-        $sql_generator = $this->newSqlGenerator();
-        $limit = $sql_generator->buildOneOffLimit(sizeof($ARGS),1);
-        
-        $result = $this->findBy($ARGS,"$order_by $limit");
+        // $sql_generator = $this->newSqlGenerator();
+        // $limit = $sql_generator->buildOneOffLimit(sizeof($ARGS),1);
+        $result = $this->findBy($ARGS,$order_by,false,1,2);
         $result = array_shift($result);
 
         return $result;
@@ -1748,8 +1713,8 @@ abstract class ActiveTable
         
         if($order_by != null)
         {
-            $sql_generator->addOrder($order_by);
-        }
+            $sql_generator = $this->make_order_by($order_by,$sql_generator);
+        } // end order by specified
 
         if($slice_start !== null && $slice_end !== null)
         {
@@ -2146,6 +2111,47 @@ abstract class ActiveTable
 
         return $PARSED;
     } // end parse_columns
+
+    protected function make_order_by($order_by,$sql_generator)
+    {
+        // Legacy mode - SQL fragment. This was how it was originally implemented, and
+        // left like this for 1y+. I have lots and lots of code that depends on this working.
+        // When I migrate all of my code, I'll cut this out.
+        if(is_array($order_by) == false)
+        {
+            $sql_generator->addOrder($order_by);
+        }
+        else
+        {
+            if(array_key_exists('direction',$order_by) == false)
+            {
+                throw new ArgumentError('No direction specified for ORDER BY.');
+            }
+            else
+            {
+                if(in_array(strtolower($order_by['direction']),array('desc','asc')) == false)
+                {
+                    throw new ArgumentError("Invalid direction '{$order_by['direction']}' specified for ORDER BY clause.");
+                }
+            }
+
+            if(array_key_exists('columns',$order_by) == false)
+            {
+                throw new ArgumentError('No columns specified for ORDER BY clause.');
+            }
+            else
+            {
+                if(sizeof($order_by['columns']) == 0)
+                {
+                    throw new ArgumentError('Empty set of columns specified for ORDER BY clause.');
+                }
+            }
+            
+            $sql_generator->addOrder($order_by);
+        } // end handle normalized order by 
+
+        return $sql_generator;
+    } // end make_order_by
 } // end ActiveTable
 
 ?>

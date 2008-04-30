@@ -317,7 +317,6 @@ class ActiveTable_SQL_PgSQL implements ActiveTable_SQL
             throw new SQLGenerationError('Limit has been set for this query; cannot return a slice.');
         }
         
-        $end++; 
         $total = $end - $start;
         $this->limit = $total;
         $this->offset = $start - 1;

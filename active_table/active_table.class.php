@@ -1181,7 +1181,7 @@ abstract class ActiveTable
     {
         // $sql_generator = $this->newSqlGenerator();
         // $limit = $sql_generator->buildOneOffLimit(sizeof($ARGS),1);
-        $result = $this->findBy($ARGS,$order_by,false,1,2);
+        $result = $this->findBy($ARGS,$order_by,false,0,1);
         $result = array_shift($result);
 
         return $result;

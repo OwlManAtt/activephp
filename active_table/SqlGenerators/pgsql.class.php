@@ -319,7 +319,7 @@ class ActiveTable_SQL_PgSQL implements ActiveTable_SQL
         
         $total = $end - $start;
         $this->limit = $total;
-        $this->offset = $start - 1;
+        $this->offset = $start;
     } // end setSlice
 
     public function getReservedWordEscapeCharacter()

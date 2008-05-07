@@ -1514,7 +1514,7 @@ abstract class ActiveTable
                 } // end default
             } // end switch
         } // end debug to logfile
-        elseif($debug == true)
+        elseif($this->debug == true)
         {
             // Fallback to something else...
             print_r($message);

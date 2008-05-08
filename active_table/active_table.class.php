@@ -1395,15 +1395,21 @@ abstract class ActiveTable
             {
                 $value = '';
             }
-                
-            $DATA["{$escape_char}$key{$escape_char}"] = $value;
-            unset($DATA[$key]);
+            
+            if($escape_char != '')
+            {
+                $DATA["{$escape_char}$key{$escape_char}"] = $value;
+                unset($DATA[$key]);
+            }
         } // end loop
 
         // Do not attempt to set the magic PK field to anything...it's 'virtual'-ish.
         if($this->newSqlGenerator()->getMagicPkName() != null)
         {
             unset($DATA[strtolower($this->newSqlGenerator()->getMagicPkName())]);
+            
+            $quoted_key = $escape_char.$DATA[strtolower($this->newSqlGenerator()->getMagicPkName())].$escape_char;
+            unset($quoted_key);
         } // end has magic PK
        
         if($this->record_state == 'new')

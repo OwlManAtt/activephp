@@ -2027,13 +2027,12 @@ abstract class ActiveTable
                 $sql_generator->addKeys($LOOKUP['foreign_table_alias'],$fkeys[$table_index_number],$table_index_number);
             } // end loopup loop
         } // end lookups > 0
-        
+ 
+        // This is used below - but only do it once and only if there's virtual attributes
+        // to consider.
+        $virt_map = array_keys($this->VIRTUAL);
         if(sizeof($this->VIRTUAL) > 0)
         {
-            // This is used below - but only do it once and only if there's virtual attributes
-            // to consider.
-            $virt_map = array_keys($this->VIRTUAL);
-            
             $i = 0;
             foreach($this->VIRTUAL as $virtual_key => $function_fragment)
             {

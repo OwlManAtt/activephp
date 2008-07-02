@@ -1274,18 +1274,34 @@ abstract class ActiveTable
         
         if($id == null)
         {
-            $id = $this->DATA[$this->primary_key];
+            $id = $this->get($this->primary_key,$this->table_name) ;
         }
-        
-        if($id == 0)
+
+        if($id == null)
         {
             throw new ArgumentError('No ID specified.',905);
         }
-
-        $sql = "DELETE FROM {$this->table_name} WHERE {$this->primary_key} = ?";
+        
+        // Generate a magic where if we need it.
+        if(strtolower($this->newSqlGenerator()->getMagicPkName()) == strtolower($this->primary_key))
+        {
+            $where_fragment = $this->newSqlGenerator()->getMagicUpdateWhere($this->table_name,$id,$this->db);
+        }
+        else
+        {
+            $where_fragment = "{$this->primary_key} = ".$this->db->quoteSmart($id);
+        }
+      
+        $table_name = $this->table_name;
+        if($this->database != null)
+        {
+            $table_name = "{$this->database}.{$this->table_name}";
+        }
+        
+        $sql = "DELETE FROM {$table_name} WHERE $where_fragment";
         
         $handle = $this->db->prepare($sql);
-        $resource = $this->execute($handle,array($id));
+        $resource = $this->execute($handle);
         $this->debug($this->db->last_query,'sql');
         $this->db->freePrepared($handle);
         if(PEAR::isError($resource))
@@ -1431,7 +1447,7 @@ abstract class ActiveTable
         elseif($this->record_state == 'loaded')
         {
             // If we're doing magic...
-            if($this->newSqlGenerator()->getMagicPkName() == $this->primary_key)
+            if(strtolower($this->newSqlGenerator()->getMagicPkName()) == strtolower($this->primary_key))
             {
                 $where_fragment = $this->newSqlGenerator()->getMagicUpdateWhere($this->table_name,$this->DATA[$this->primary_key],$this->db);
             }

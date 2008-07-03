@@ -1446,16 +1446,18 @@ abstract class ActiveTable
         } // end new
         elseif($this->record_state == 'loaded')
         {
+            $pk_value = $this->get($this->primary_key,$this->table_name);
+            
             // If we're doing magic...
             if(strtolower($this->newSqlGenerator()->getMagicPkName()) == strtolower($this->primary_key))
             {
-                $where_fragment = $this->newSqlGenerator()->getMagicUpdateWhere($this->table_name,$this->DATA[$this->primary_key],$this->db);
+                $where_fragment = $this->newSqlGenerator()->getMagicUpdateWhere($this->table_name,$pk_value,$this->db);
             }
             
             // Fall back to something reasonable:
             if($where_fragment == null)
             {
-                $where_fragment = "{$this->primary_key} = ".$this->db->quoteSmart($this->DATA[strtolower($this->primary_key)]);
+                $where_fragment = "{$this->primary_key} = ".$this->db->quoteSmart($pk_value);
             }
             
             $resource = $this->db->autoExecute($table_name,$DATA,DB_AUTOQUERY_UPDATE,$where_fragment);

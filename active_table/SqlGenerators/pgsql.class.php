@@ -305,11 +305,6 @@ class ActiveTable_SQL_PgSQL implements ActiveTable_SQL
         return "SELECT lastval() AS last_insert_id";
     } // end getLastInsertId
 
-    public function buildOneOffLimit($condition_number,$limit_number)
-    {
-        return "LIMIT $limit_number\n";
-    } // end buildOneOffLimit
-    
     public function setSlice($start,$end)
     {
         if($this->limit != null)
@@ -322,11 +317,15 @@ class ActiveTable_SQL_PgSQL implements ActiveTable_SQL
         $this->offset = $start;
     } // end setSlice
 
-    public function getReservedWordEscapeCharacter()
+    public function getReservedWordEscapeCharacterLeft()
     {
         return '"';
-    } // end getReservedWordEscapeCharacter
+    } // end getReservedWordEscapeCharacterLeft
 
+    public function getReservedWordEscapeCharacterRight()
+    {
+        return $this->getReservedWordEscapeCharacterLeft();
+    }
 } // end ActiveTable_PgSQL_SQL
 
 ?>

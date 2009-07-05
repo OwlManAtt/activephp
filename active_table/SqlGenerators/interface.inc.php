@@ -148,19 +148,6 @@ interface ActiveTable_SQL
     public function addLimit($limit);
     
     /**
-     * Register function to build a one-off LIMIT statement.
-     *
-     * This will construct an appropriate LIMIT statement for your RDBMS and the
-     * number of args you are searching on (ie, AND/WHERE decision in OCI8).
-     *
-     * This is used for findOneBy() to stay DRY.
-     *
-     * @param integer The number of WHERE clauses.
-     * @param integer The number of rows to retrieve. 
-     **/
-    public function buildOneOffLimit($condition_number,$limit_number);
-
-    /**
      * Generate a SQL query to return a slice from a larger result set.
      *
      * @param integer $start The position to begin the slice at. Start at 0, not 1.
@@ -169,11 +156,18 @@ interface ActiveTable_SQL
     public function setSlice($start,$end);
 
     /**
-     * Get the escape character used around a reserved word. 
+     * Get the escape character used on the left side of a reserved word. 
      * 
      * @return string 
      **/
-    public function getReservedWordEscapeCharacter();
+    public function getReservedWordEscapeCharacterLeft();
+
+    /**
+     * Get the escape character used on the right side of a reserved word. 
+     * 
+     * @return string 
+     **/
+    public function getReservedWordEscapeCharacterRight();
 
 } // end ActiveTable_SQL
 ?>

@@ -309,16 +309,6 @@ class ActiveTable_SQL_Oracle implements ActiveTable_SQL
         return "SELECT ROWIDTOCHAR(MAX(rowid)) FROM $table";
     } // end getLastInsertId
 
-    public function buildOneOffLimit($condition_number,$limit_number)
-    {
-        if($condition_number == 0)
-        {
-            return "WHERE rownum >= $limit_number\n";
-        }
-        
-        return "AND rownum >= $limit_number\n";
-    } // end buildOneOffLimit
-
     public function setSlice($start,$end)
     {
         $this->get_slice = true;
@@ -326,12 +316,15 @@ class ActiveTable_SQL_Oracle implements ActiveTable_SQL
         $this->slice_end = $end;
     } // end setSlice
 
-    public function getReservedWordEscapeCharacter()
+    public function getReservedWordEscapeCharacterLeft()
     {
-        // TODO. I think ' works, but I need to test that.
-        return '';
-    } // end getReservedWordEscapeCharacter
+        return "";
+    } // end getReservedWordEscapeCharacterLeft
 
+    public function getReservedWordEscapeCharacterRight()
+    {
+        return $this->getReservedWordEscapeCharacterLeft();
+    }
 } // end ActiveTable_Oracle_SQL
 
 ?>

@@ -15,6 +15,7 @@ require_once('SqlGenerators/interface.inc.php');
 require_once('SqlGenerators/mysql.class.php');
 require_once('SqlGenerators/oci.class.php');
 require_once('SqlGenerators/pgsql.class.php');
+require_once('SqlGenerators/mssql.class.php');
 
 /**
  * Table definition cacher libraries. 
@@ -331,6 +332,13 @@ abstract class ActiveTable
                 break;
             } // end oci8
 
+            case 'mssql':
+            {
+                $this->sql_generator = 'ActiveTable_SQL_MSSQL';
+
+                break;
+            } // end mssql
+
             default:
             {
                 throw new ArgumentError('Unsupported RDBMS specified in phptype.',20);
@@ -466,7 +474,7 @@ abstract class ActiveTable
             {
                 throw new ArgumentError("Local key not defined in record set $record_set_name.",912);
             }
-            
+
             // Intialize the ID list.
             $this->RELATED_IDS[$record_set_name] = array();
         } // end related set validation
@@ -1179,8 +1187,6 @@ abstract class ActiveTable
      */
     public function findOneBy($ARGS,$order_by='')
     {
-        // $sql_generator = $this->newSqlGenerator();
-        // $limit = $sql_generator->buildOneOffLimit(sizeof($ARGS),1);
         $result = $this->findBy($ARGS,$order_by,false,0,1);
         $result = array_shift($result);
 
@@ -1388,13 +1394,16 @@ abstract class ActiveTable
         // PEAR::DB's autoExecute facility doesn't concern itself with escaping reserved words.
         // It would be a large architectural change to fix that, so I'll just work around it in
         // here instead of fixing it there and trying to get a patch pushed through.
-        $escape_char = $this->newSqlGenerator()->getReservedWordEscapeCharacter();
+        //
+        // Also, there is a left/right because SQL Server uses [ and ]. :-|
+        $escape_char_left = $this->newSqlGenerator()->getReservedWordEscapeCharacterLeft();
+        $escape_char_right = $this->newSqlGenerator()->getReservedWordEscapeCharacterRight();
 
         // Oracle users need db.table.
-        $table_name = "{$escape_char}{$this->table_name}{$escape_char}";
+        $table_name = "{$escape_char_left}{$this->table_name}{$escape_char_right}";
         if($this->database != '')
         {
-            $table_name = "{$escape_char}{$this->database}{$escape_char}.{$escape_char}{$this->table_name}{$escape_char}";
+            $table_name = "{$escape_char_left}{$this->database}{$escape_char_right}.{$escape_char_left}{$this->table_name}{$escape_char_right}";
         }
         
         if($this->allow_pk_write == false)
@@ -1412,9 +1421,9 @@ abstract class ActiveTable
                 $value = '';
             }
             
-            if($escape_char != '')
+            if($escape_char_left != '')
             {
-                $DATA["{$escape_char}$key{$escape_char}"] = $value;
+                $DATA["{$escape_char_left}$key{$escape_char_right}"] = $value;
                 unset($DATA[$key]);
             }
         } // end loop
@@ -1424,7 +1433,7 @@ abstract class ActiveTable
         {
             unset($DATA[strtolower($this->newSqlGenerator()->getMagicPkName())]);
             
-            $quoted_key = $escape_char.$DATA[strtolower($this->newSqlGenerator()->getMagicPkName())].$escape_char;
+            $quoted_key = $escape_char_left.$DATA[strtolower($this->newSqlGenerator()->getMagicPkName())].$escape_char_right;
             unset($quoted_key);
         } // end has magic PK
        
@@ -1436,7 +1445,8 @@ abstract class ActiveTable
             {
                 throw new SQLError($resource->getDebugInfo(),$resource->userinfo,907);
             }
-
+            
+            // TODO broken for oracle is PK isn't ROWID
             $id = $this->db->getOne($this->newSqlGenerator()->getLastInsertId($table_name));
             
             if(PEAR::isError($id))
@@ -1641,18 +1651,29 @@ abstract class ActiveTable
             $table = $this->table_name;
         }
 
-        $CACHE = $this->cacher->loadTable($table,$database_schema_name);
+        $RESULT = array(); // Structure
 
+        // If this is the primary table and the DB supports magic PKs, include it in the describe.
+        // Should be in position zero (cx_0).
+        // 
+        // This is done before figuring out if the table is cached. If this is cached by another describe from a different
+        // class that has the table as a JOIN, it will not include the magic PK (since we don't care about a lookup table's PK).
+        $sql_generator = $this->newSqlGenerator(); 
+        if($sql_generator->getMagicPkName() != null && strtolower($table) == strtolower($this->table_name))
+        {
+            $RESULT[strtolower($sql_generator->getMagicPkName())] = null;
+        } // end add rowid
+
+        $CACHE = $this->cacher->loadTable($table,$database_schema_name);
         if(is_array($CACHE) == true)
         {
             $this->debug("Cached structure found for $table.",'cache');
-            $RESULT = $CACHE;
+            $RESULT = array_merge($RESULT,$CACHE);
         }
         else
         {
             $this->debug("Cached structure not found for $table; describing...",'cache');
 
-            $sql_generator = $this->newSqlGenerator(); 
             $sql = $sql_generator->getDescribeTable($table,$database);
 
             $resource = $this->db->query($sql);
@@ -1662,15 +1683,6 @@ abstract class ActiveTable
             {
                 throw new SQLError($resource->getDebugInfo(),$resource->userinfo,905);
             }
-            
-            $RESULT = array();
-            
-            // If this is the primary table and the DB supports magic PKs, include it in the describe.
-            // Should be in position zero (cx_0).
-            if($sql_generator->getMagicPkName() != null && $table == $this->table_name)
-            {
-                $RESULT[strtolower($sql_generator->getMagicPkName())] = null;
-            } // end add rowid
             
             while($resource->fetchInto($ROW))
             {

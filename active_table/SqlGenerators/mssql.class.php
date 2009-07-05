@@ -16,7 +16,7 @@
  * @copyright  2007-2008, Yasashii Syndicate
  * @version    Release: @package_version@
  **/
-class ActiveTable_SQL_MySQL implements ActiveTable_SQL
+class ActiveTable_SQL_MsSQL implements ActiveTable_SQL
 {   
     protected $columns = array();
     protected $from = '';
@@ -26,6 +26,13 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
     protected $order_direction = '';
     protected $limit = '';
     public $magic_pk_name = null;
+
+    // If get_slice is true, a slice query will be generated.
+    private $get_slice = false;
+    private $slice_size = null;
+    private $slice_end = null;
+    private $order_columns = null;
+    private $slice_ordering_column_name_cache = null;
 
     public function __construct()
     {
@@ -61,20 +68,26 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
     {
         if(is_array($sql_fragment) == false)
         {
-            $this->order = $sql_fragment;
+            // We need to be able to use the order by information for slicing because MS SQL is retarded and has no ROWNUM or OFFSET.
+            throw new SQLGenerationError('Using a raw SQL order-by fragment with the MS SQL driver is unsupported. Please use array syntax.');
         }
         else
         {
             $ORDER = array();
             $COLUMNS = $sql_fragment['columns'];
-
+            $RAW_COLUMNS = array();
+            
             foreach($COLUMNS as $COLUMN)
             {
-                $ORDER[] = "`{$COLUMN['table']}`.`{$COLUMN['column']}`";
-            }
+                $ORDER[] = "[{$COLUMN['table']}].[{$COLUMN['column']}]";
 
+                // Find the alias for this column, since the outer queries in the nested query won't have table.
+                $RAW_COLUMNS[] = '['.$this->slice_ordering_column_name_cache[$COLUMN['table']][$COLUMN['column']].']';
+            }
+            
             $this->order = $ORDER;
             $this->order_direction = $sql_fragment['direction'];
+            $this->order_columns = $RAW_COLUMNS;
         }
     } // end addOrder
 
@@ -87,6 +100,16 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
             case 'select':
             {
                 $sql .= "SELECT\n";
+                
+                if($this->limit != null)
+                {
+                    $sql .= "TOP ({$this->limit})\n";
+                }
+                elseif($this->get_slice == true)
+                {
+                    $sql .= "TOP ({$this->slice_end})\n";
+                }
+                
                 $sql .= implode(",\n",$this->columns)."\n";
                 $sql .= "FROM {$this->from}\n";
 
@@ -102,21 +125,68 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
 
                 if($this->order != null)
                 {
-                    if(is_array($this->order) == true)
+                    if($this->get_slice == true && $this->order_direction != 'DESC')
                     {
-                        $sql .= "ORDER BY ".implode(', ',$this->order)." {$this->order_direction}\n";
-                    }
-                    else
-                    {
-                        $sql .= $this->order."\n";
-                    }
+                        if($this->order_direction == 'DESC')
+                        {
+                            $SLICE_ORDER = array('DESC','ASC','DESC');
+                        }
+                        else
+                        {
+                            $SLICE_ORDER = array('ASC','DESC','ASC');
+                        }
+                    } // end build the ORDER BY orders.
+                    
+                    $sql .= "ORDER BY ".implode(', ',$this->order)." {$this->order_direction}\n";
                 }
-
-                if($this->limit != null)
+                elseif($this->order == null && $this->get_slice == true)
                 {
-                    $sql .= "LIMIT {$this->limit}";
+                    // If there is no order by clause specified, use the first column (which we have AS'd to cx_0).
+                    // Kind of kludgy, but I don't know what else to do here apart from throw an exception, and that
+                    // would make the MS SQL driver work *way* to differently from the rest.
+                    $sql .= "ORDER BY cx_0 DESC\n";  
+                    $this->order_columns = array('cx_0');
                 }
 
+                if($this->get_slice == true)
+                {
+                    /*
+                    * Selecting the slice 10, 40. MS SQL does not have an OFFSET, mysqlesque LIMIT, or ROWNUM[1].
+                    * To do this, we need to take every row UP TO the last row we want, then flip that around and
+                    * take the top $how_many_we_want rows from that result set. Then we flip it back around so its
+                    * in the order we wanted it originally.
+                    *
+                    * [1] SQL Server 2005 has something like rownum, but it works weirdly with the ORDER BY 
+                    *     (some kind of OVER (order by clause) in the beginning of the query) and that would generate 
+                    *     invalid SQL for a SQL Server 2000 server, which is Bad (and useless to me!).
+                    *
+                    * SELECT * FROM 
+                    * (
+                    *     SELECT TOP (30) -- Number of results you want ${40 - 10}
+                    *         * 
+                    *     FROM 
+                    *     (
+                    *         SELECT TOP (40) -- 'Deepest' result you want (We need 40 rows to get the bottom 30)
+                    *             affiliate_id, comapany_name 
+                    *         FROM affiliate 
+                    *         ORDER BY affiliate_id DESC
+                    *     )
+                    *     ORDER BY affiliate_id ASC 
+                    * )
+                    * ORDER BY affiliate_id DESC
+                    */
+                    $wrapper = "SELECT * FROM (\n";
+                        $wrapper .= "SELECT TOP ({$this->slice_size}) *\n";
+                        $wrapper .= "FROM (\n";
+                            $wrapper .= $sql; 
+                        $wrapper .= ") AS [fake_table]\n"; 
+                        $wrapper .= "ORDER BY ".implode(', ',$this->order_columns)." {$SLICE_ORDER[1]}\n";
+                    $wrapper .= ") AS [another_fake_table]\n";
+                    $wrapper .= "ORDER BY ".implode(', ',$this->order_columns)." {$SLICE_ORDER[2]}";
+
+                    $sql = $wrapper;
+                } // end add slice wrapper query 
+            
                 break;
             } // end select
         } // end switch
@@ -128,11 +198,11 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
     {
         if($database == null)
         {
-            $this->from = "`$table`";
+            $this->from = "[$table]";
         }
         else
         {
-            $this->from = "`$database`.`$table`";
+            $this->from = "[$database].[$table]";
         }
     } // end addFrom
 
@@ -147,7 +217,7 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
             case '<>':
             case '=':
             {
-                $this->where[] = "`$table`.`$column` $type ?";
+                $this->where[] = "[$table].[$column] $type ?";
 
                 break;
             } // end >= > <= < <> =
@@ -175,7 +245,7 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
                     throw new ArgumentError('Attempting to do IN with no data.');
                 }
                 
-                $this->where[] = "`$table`.`$column` $in ($placeholders)";
+                $this->where[] = "[$table].[$column] $in ($placeholders)";
     
                 break;
             } // end in, not_in
@@ -193,7 +263,7 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
                     $is = 'IS NOT NULL';
                 }
                 
-                $this->where[] = "`$table`.`$column` $is";
+                $this->where[] = "[$table].[$column] $is";
     
                 break;
             } // end is, is_not
@@ -211,7 +281,7 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
                     $like = 'NOT LIKE';
                 }
                 
-                $this->where[] = "`$table`.`$column` $like ?";
+                $this->where[] = "[$table].[$column] $like ?";
 
                 break;
             } // end like, not_like
@@ -228,37 +298,48 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
     
     public function addLimit($limit)
     {
-        $this->limit = "$limit";
+        $this->limit = $limit;
     } // end addLimit
     
     // Must return in the format table__column
     public function addKeys($table,$COLUMNS,$table_id='x')
     {
+        $COLUMN_NAME_CACHE = array();
+        
         foreach($COLUMNS as $id => $key)
         {
             if($key != null)
             {
-                $this->columns[] = "`{$table}`.`{$key}` AS `c{$table_id}_{$id}`";
-            }
+                $column_alias = "c{$table_id}_{$id}";
+                $this->columns[] = "[{$table}].[{$key}] AS [$column_alias]";
+                
+                if(array_key_exists($table,$COLUMN_NAME_CACHE) == false)
+                {
+                    $COLUMN_NAME_CACHE[$table] = array();
+                }
+                
+                $COLUMN_NAME_CACHE[$table][$key] = $column_alias;
+            } // end key not null do it do it
         } // end column loop
-
+            
+        $this->slice_ordering_column_name_cache = $COLUMN_NAME_CACHE;
     } // end addKeys
 
     public function addVirtualKey($statement,$index)
     {
-        $this->columns[] = "$statement AS `cVIRT_$index`";
+        $this->columns[] = "$statement AS [cVIRT_$index]";
     } // end addVirtualKey
     
     public function getDescribeTable($table_name,$database=null)
     {
-        if($database == null)
+        $sql = "SELECT COLUMN_NAME AS [field], DATA_TYPE AS [type] FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{$table_name}'";
+
+        if($database != null)
         {
-            return "DESCRIBE `$table_name`";
+            $sql .= " AND TABLE_CATALOG = '{$database}'"; 
         }
-        else
-        {
-            return "DESCRIBE `$database`.`$table_name`";
-        }
+
+        return $sql;
     } // end getDescribeTable
     
     // public function addJoinClause($LOOKUPS)
@@ -289,34 +370,31 @@ class ActiveTable_SQL_MySQL implements ActiveTable_SQL
             } // end inner
         } // end join switch
 
-        $this->join[] = "$join `{$foreign_table}` `{$foreign_table_alias}` ON `{$local_table}`.`{$local_key}` = `{$foreign_table_alias}`.`{$foreign_key}`";
+        $this->join[] = "$join [{$foreign_table}] [{$foreign_table_alias}] ON [{$local_table}].[{$local_key}] = [{$foreign_table_alias}].[{$foreign_key}]";
     } // end addJoinClause
 
     public function getLastInsertId($table)
     {
-        return "SELECT last_insert_id() AS last_insert_id";
+        throw new SQLGenerationError('Write operations are not currently implemented for MSSQL. Cannot generate last insert ID query.');
     } // end getLastInsertId
 
     public function setSlice($start,$end)
     {
-        if($this->limit != null)
-        {
-            throw new SQLGenerationError('Limit has been set for this query; cannot return a slice.');
-        }
-        
-        $total = $end - $start;
-        $this->limit = "$start,$total";
+        $this->get_slice = true;
+        $this->slice_size = ($end - $start);
+        $this->slice_end = $end;
     } // end setSlice
 
     public function getReservedWordEscapeCharacterLeft()
     {
-        return '`';
-    } // end getReservedWordEscapeCharacterLeft
+        return '[';
+    } // end getReservedWordEscapeCharacter
 
     public function getReservedWordEscapeCharacterRight()
     {
-        return $this->getReservedWordEscapeCharacterLeft();
-    }
+        return ']';
+    } // end getReservedWordEscapeCharacter
+
 } // end ActiveTable_MySQL_SQL
 
 ?>
